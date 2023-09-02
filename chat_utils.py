@@ -69,6 +69,9 @@ class ContextManager:
         logging.debug(f"generate_context DEBUG Context: {context}")
         return context
 
+    
+# TODO - add date and time to context if keywords for date and time are found in the last message inputted by the user
+
     def add_custom_context(self, custom_context: str) -> None:
         """Add custom context."""
         self.custom_context += f"Your an amazing AI Lifeform, Called Pilot Pro, your job is to help as best you can with simple instructions and complete info. {custom_context}"
@@ -95,6 +98,7 @@ class ContextManager:
         """Add the last n messages to the context."""
         last_n_messages = self.db.get_last_n_messages(n, username)
         self.add_custom_context("\n".join(last_n_messages))
+
 
     def add_last_session_messages_context(self, username: str) -> None:
         """Add the last two message pairs from the last session to the context."""
