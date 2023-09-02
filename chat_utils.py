@@ -106,7 +106,7 @@ class ContextManager:
             self.custom_context += f"Your an amazing AI Lifeform, Called Pilot Pro, your job is to help as best you can with simple instructions and complete info. {custom_context}"
             
             # Log the success of adding the custom context.
-            logging.info(f"CLASS ContextManager - add_custom_context: Successfully added custom context: {custom_context}")
+            logging.debug(f"CLASS ContextManager - add_custom_context: Successfully added custom context: {custom_context}")
             
         except Exception as e:
             # Log detailed error information if there's an exception while adding custom context.
@@ -124,27 +124,27 @@ class ContextManager:
         """Add the user's name to the context."""
         logging.debug(f"CLASS ContextManager - add_name_context: Adding name {name} to context.")
         self.add_custom_context(f"The user's name is {name}.")
-        logging.info(f"CLASS ContextManager - add_name_context: Name context added.")
+        logging.debug(f"CLASS ContextManager - add_name_context: Name context added.")
 
     def add_current_time_context(self) -> None:
         """Add the current time to the context."""
         current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         logging.debug(f"CLASS ContextManager - add_current_time_context: Adding current time {current_time} to context.")
         self.add_custom_context(f"The current time is {current_time}.")
-        logging.info(f"CLASS ContextManager - add_current_time_context: Current time context added.")
+        logging.debug(f"CLASS ContextManager - add_current_time_context: Current time context added.")
 
     def add_last_session_time_context(self, last_session_time: str) -> None:
         """Add the time of the last session to the context."""
         logging.debug(f"CLASS ContextManager - add_last_session_time_context: Adding last session time {last_session_time} to context.")
         self.add_custom_context(f"The last session was at {last_session_time}.")
-        logging.info(f"CLASS ContextManager - add_last_session_time_context: Last session time context added.")
+        logging.debug(f"CLASS ContextManager - add_last_session_time_context: Last session time context added.")
 
     def add_last_message_context(self, last_message_sent: str, last_message_received: str) -> None:
         """Add the last message sent and received to the context."""
         logging.debug(f"CLASS ContextManager - add_last_message_context: Adding last messages to context.")
         self.add_custom_context(f"The last message sent was: {last_message_sent}")
         self.add_custom_context(f"The last message received was: {last_message_received}")
-        logging.info(f"CLASS ContextManager - add_last_message_context: Last message context added.")
+        logging.debug(f"CLASS ContextManager - add_last_message_context: Last message context added.")
 
     def add_last_n_messages_context(self, n: int, username: str) -> None:
         """Add the last n messages to the context."""
@@ -163,7 +163,7 @@ class ContextManager:
             self.add_custom_context("\n".join(last_n_messages))
             
             # Log the success of adding the last n messages to the context.
-            logging.info(f"CLASS ContextManager - add_last_n_messages_context: Successfully added the last {n} messages for {username} to context.")
+            logging.debug(f"CLASS ContextManager - add_last_n_messages_context: Successfully added the last {n} messages for {username} to context.")
             
         except Exception as e:
             # Log detailed error information if there's an exception while adding the last n messages to the context.

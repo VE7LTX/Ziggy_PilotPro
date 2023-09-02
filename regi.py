@@ -224,7 +224,7 @@ class RegiDatabase(Database):
     
 class CryptoHandler:
     @staticmethod
-    def generate_user_key(self):
+    def generate_user_key():
         """Generate a new encryption key for a user."""
         logging.debug("CLASS CryptoHandler - generate_user_key: Starting method.")
         try:
@@ -376,7 +376,8 @@ class SessionManager:
         logging.warning(f"CLASS SessionManager - validate_session: No session found with session ID: {session_id}.")
         return (False, None)
 
-    def terminate_session(self, session_id: str):
+    def terminate_session(self, session_info: tuple[str, str]):
+        session_id, _ = session_info  # Unpack the tuple to get the session_id
         """Deletes the session from the database."""
         logging.debug(f"CLASS SessionManager - terminate_session: Initiating termination process for session with ID: {session_id}")
         
@@ -617,12 +618,15 @@ class App:
             logging.debug(f"Current Session ID = {self.current_session}")
             logging.debug(f"Current User Role = {self.current_user_role}")
 
-            # Set logging level to DEBUG for admin users
+            # Set the appropriate logging level based on user role
             if self.current_user_role == "admin":
                 logging.getLogger().setLevel(logging.DEBUG)
+            else:
+                logging.getLogger().setLevel(logging.INFO)  # Set logging level to INFO for all non-admin users
         else:
             logging.warning("Login failed for username: %s", username)  # Log warning for failed login
             print("Login failed.")
+
 
     def change_password(self):
         """Allows the user to change their password."""

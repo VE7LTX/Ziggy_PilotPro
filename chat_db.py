@@ -44,18 +44,51 @@ import sqlite3
 from typing import List, Tuple
 import logging
 
+
 def encrypt(message: str) -> str:
-    return ''.join(chr(ord(c) + 3) for c in message)
+    """
+    Encrypts the given message by adding 3 to the ordinal value of each character.
+
+    Parameters:
+    - message (str): The plain text message to be encrypted.
+
+    Returns:
+    - str: The encrypted message.
+    """
+    logging.debug("Function encrypt - Start: Starting encryption for message.")
+    try:
+        encrypted_message = ''.join(chr(ord(c) + 3) for c in message)
+        logging.debug(f"Function encrypt - Success: Message successfully encrypted. Original: {message}, Encrypted: {encrypted_message}")
+        return encrypted_message
+    except Exception as e:
+        logging.exception(f"Function encrypt - Error: An error occurred during encryption for message: {message}. Error: {e}")
+        raise
 
 def decrypt(encrypted_message: str) -> str:
-    return ''.join(chr(ord(c) - 3) for c in encrypted_message)
+    """
+    Decrypts the given encrypted message by subtracting 3 from the ordinal value of each character.
 
+    Parameters:
+    - encrypted_message (str): The encrypted message to be decrypted.
 
+    Returns:
+    - str: The decrypted message.
+    """
+    logging.debug("Function decrypt - Start: Starting decryption for encrypted message.")
+    try:
+        decrypted_message = ''.join(chr(ord(c) - 3) for c in encrypted_message)
+        logging.debug(f"Function decrypt - Success: Message successfully decrypted. Encrypted: {encrypted_message}, Decrypted: {decrypted_message}")
+        return decrypted_message
+    except Exception as e:
+        logging.exception(f"Function decrypt - Error: An error occurred during decryption for encrypted message: {encrypted_message}. Error: {e}")
+        raise
+    
+    
 class ChatDatabase:
     def __init__(self, db_name: str = "chat.db"):
         self.db_folder = "DB"  # Default folder name
         logging.debug(f"CLASS ChatDatabase - __init__: Initializing ChatDatabase with database name: {db_name}")
-        
+
         # Ensure the DB folder exists or create it
         if not os.path.exists(self.db_folder):
             os.makedirs(self.db_folder)
@@ -65,7 +98,8 @@ class ChatDatabase:
         
         self.db_name = os.path.join(self.db_folder, db_name)
         self.conn = None
-        logging.info(f"CLASS ChatDatabase - __init__: ChatDatabase initialized successfully with database path: {self.db_name}")
+        logging.debug(f"CLASS ChatDatabase - __init__: ChatDatabase initialized successfully with database path: {self.db_name}")
+
 
     def __enter__(self):
         logging.debug(f"CLASS ChatDatabase - __enter__: Entering context management for database: {self.db_name}")
@@ -81,21 +115,35 @@ class ChatDatabase:
     def open_connection(self):
         logging.debug(f"CLASS ChatDatabase - open_connection: Preparing to open connection to database: {self.db_name}")
         
+        # Check if the database file exists before attempting to connect
+        if not os.path.exists(self.db_name):
+            logging.warning(f"CLASS ChatDatabase - open_connection: Database file {self.db_name} does not exist. Will be created upon connection.")
+        
         if not self.conn:
             try:
+                logging.debug(f"CLASS ChatDatabase - open_connection: Attempting to establish a connection to database: {self.db_name}")
                 self.conn = sqlite3.connect(self.db_name)
                 logging.debug(f"CLASS ChatDatabase - open_connection: Successfully established connection to database: {self.db_name}")
                 
+                # Check and create tables
+                logging.debug(f"CLASS ChatDatabase - open_connection: Checking and creating necessary tables in database: {self.db_name}")
                 self._create_tables()
                 logging.debug(f"CLASS ChatDatabase - open_connection: Tables checked/created successfully in database: {self.db_name}")
+            
             except sqlite3.OperationalError as oe:
-                logging.error(f"CLASS ChatDatabase - open_connection: Operational Error: {oe}")
+                logging.error(f"CLASS ChatDatabase - open_connection: Operational Error while attempting to connect to {self.db_name}. Error: {oe}")
+                logging.debug(f"CLASS ChatDatabase - open_connection: Checking if database file {self.db_name} is accessible and not locked by another process.")
+            
             except sqlite3.Error as e:
-                logging.error(f"CLASS ChatDatabase - open_connection: sqlite3 Error: {e}")
+                logging.error(f"CLASS ChatDatabase - open_connection: sqlite3 Error while attempting to connect to {self.db_name}. Error: {e}")
+                logging.debug(f"CLASS ChatDatabase - open_connection: Verifying database file integrity and structure.")
+            
             except Exception as e:
-                logging.exception(f"CLASS ChatDatabase - open_connection: Unexpected Error: {e}")
+                logging.exception(f"CLASS ChatDatabase - open_connection: Unexpected Error while attempting to connect to {self.db_name}. Error: {e}")
+                logging.debug(f"CLASS ChatDatabase - open_connection: Checking environmental factors and external dependencies.")
+        
         else:
-            logging.warning(f"CLASS ChatDatabase - open_connection: Connection already active to database: {self.db_name}")
+            logging.warning(f"CLASS ChatDatabase - open_connection: Connection already active to database: {self.db_name}. Consider closing the current connection before opening a new one.")
 
 
     def close_connection(self):
@@ -163,26 +211,40 @@ class ChatDatabase:
         """
         logging.debug(f"CLASS ChatDatabase - insert_message: Preparing to insert message for user: {username}. Message: {message}")
 
+        # Checking for database connection status
+        if not self.conn:
+            logging.error(f"CLASS ChatDatabase - insert_message: No active connection to database: {self.db_name}. Ensure the connection is established before inserting messages.")
+            return
+
         try:
             encrypted = False
             if encrypt_message:
+                logging.debug(f"CLASS ChatDatabase - insert_message: Encrypting message for user: {username}")
                 message = encrypt(message)
                 encrypted = True
                 logging.debug(f"CLASS ChatDatabase - insert_message: Message encrypted successfully for user: {username}")
 
+            logging.debug(f"CLASS ChatDatabase - insert_message: Attempting to insert encrypted message into the 'chat_sessions' table.")
             with self.conn:
                 self.conn.execute("INSERT INTO chat_sessions (username, message, role, encrypted) VALUES (?, ?, ?, ?)",
                                 (username, message, role, encrypted))
             logging.debug(f"CLASS ChatDatabase - insert_message: Message inserted successfully into the database for user: {username}")
 
+        except sqlite3.IntegrityError as ie:
+            logging.error(f"CLASS ChatDatabase - insert_message: Integrity Error while inserting message for user: {username}. Possibly a primary key conflict. Error: {ie}")
+        except sqlite3.OperationalError as oe:
+            logging.error(f"CLASS ChatDatabase - insert_message: Operational Error while inserting message for user: {username}. Error: {oe}")
+            logging.debug(f"CLASS ChatDatabase - insert_message: Verifying 'chat_sessions' table structure in database: {self.db_name}")
         except sqlite3.Error as e:
-            logging.exception(f"CLASS ChatDatabase - insert_message: Database error occurred while inserting message for user: {username}. Error: {e}")
+            logging.exception(f"CLASS ChatDatabase - insert_message: General sqlite3 error occurred while inserting message for user: {username}. Error: {e}")
         except Exception as e:
             logging.exception(f"CLASS ChatDatabase - insert_message: An unexpected error occurred while inserting message for user: {username}. Error: {e}")
 
 
+
     def get_messages(self, username: str) -> List[Tuple[str, str, str]]:
         """Retrieve all messages for a given username."""
+        logging.debug(f"CLASS ChatDatabase - get_messages: Checking if database connection is active before retrieving all messages for user: {username}.")
         if not self.conn:
             logging.error("CLASS ChatDatabase DEBUG get_messages Connection is not open!")
             return []
@@ -196,13 +258,11 @@ class ChatDatabase:
             return []
             
             
+
     def get_last_n_messages(self, n: int, username: str) -> List[Tuple[str, str]]:
-        """Retrieve the last 'n' messages for a given user."""
-        
-        # Logging the start of the method with input details.
+        logging.debug(f"CLASS ChatDatabase - get_last_n_messages: Checking if database connection is active before retrieving the last {n} messages for user: {username}.")
         logging.debug("CLASS ChatDatabase - get_last_n_messages: Starting method. User: %s, Retrieving last %s messages.", username, n)
         
-        # Check if the connection is not open and log the error with the database name.
         if not self.conn:
             logging.error("CLASS ChatDatabase - get_last_n_messages: Connection is not open. Database: %s.", self.db_name)
             logging.error("Recommendation: Ensure the database connection is initialized and accessible.")
@@ -210,26 +270,20 @@ class ChatDatabase:
         
         try:
             with self.conn:
-                # Execute the SQL query.
                 cursor = self.conn.execute(
                     "SELECT message, role, encrypted FROM chat_sessions WHERE username = ? "
                     "ORDER BY id DESC LIMIT ?", (username, n))
                 messages = cursor.fetchall()
                 
-                # Log a warning if no messages are found for the given user.
                 if not messages:
                     logging.warning("CLASS ChatDatabase - get_last_n_messages: No messages found for user %s.", username)
                 
-                # Decrypt the messages if they are encrypted.
                 decrypted_messages = [(decrypt(message) if encrypted else message, role) for message, role, encrypted in messages]
-                
-                # Log the decrypted messages retrieved for the user.
                 logging.debug("CLASS ChatDatabase - get_last_n_messages: Messages retrieved for user %s: %s", username, decrypted_messages)
                 
                 return decrypted_messages
             
         except sqlite3.Error as e:
-            # Log detailed error information if there's an exception while retrieving messages.
             logging.error("CLASS ChatDatabase - get_last_n_messages: Error retrieving messages for user %s from database %s.", username, self.db_name)
             logging.error("Exception Type: %s.", type(e).__name__)
             logging.error("Exception Args: %s.", e.args)
@@ -238,15 +292,12 @@ class ChatDatabase:
             return []
         
         finally:
-            # Log the completion of method execution.
             logging.info("CLASS ChatDatabase - get_last_n_messages: Method execution complete for user %s.", username)
 
 
     def close(self):
-        """Close the database connection."""
         logging.debug(f"CLASS ChatDatabase - close: Initiating the closing procedure for database: {self.db_name}.")
         
-        # Check if the connection is active before attempting to close
         if self.conn:
             logging.debug(f"CLASS ChatDatabase - close: Connection is active. Proceeding to close the connection to database: {self.db_name}.")
             self.close_connection()
