@@ -224,48 +224,72 @@ class RegiDatabase(Database):
     
 class CryptoHandler:
     @staticmethod
-    def generate_user_key():
+    def generate_user_key(self):
         """Generate a new encryption key for a user."""
-        logging.debug("CLASS CryptoHandler - generate_user_key: Generating new encryption key for a user.")
-        user_key = Fernet.generate_key()
-        logging.debug("CLASS CryptoHandler - generate_user_key: Encryption key generated successfully.")
-        return user_key
+        logging.debug("CLASS CryptoHandler - generate_user_key: Starting method.")
+        try:
+            user_key = Fernet.generate_key()
+            logging.debug("CLASS CryptoHandler - generate_user_key: Encryption key generated successfully: %s", user_key)
+            return user_key
+        except Exception as e:
+            logging.exception("CLASS CryptoHandler - generate_user_key: Exception occurred during key generation: %s", e)
+            return None
 
     @staticmethod
     def encrypt_user_key(user_key: bytes, main_key: bytes) -> bytes:
         """Encrypt a user-specific key using the main encryption key."""
-        logging.debug("CLASS CryptoHandler - encrypt_user_key: Encrypting user-specific key.")
-        fernet = Fernet(main_key)
-        encrypted_user_key = fernet.encrypt(user_key)
-        logging.debug("CLASS CryptoHandler - encrypt_user_key: User-specific key encrypted successfully.")
-        return encrypted_user_key
+        logging.debug("CLASS CryptoHandler - encrypt_user_key: Starting method.")
+        try:
+            logging.debug("CLASS CryptoHandler - encrypt_user_key: Main key: %s", main_key)
+            fernet = Fernet(main_key)
+            encrypted_user_key = fernet.encrypt(user_key)
+            logging.debug("CLASS CryptoHandler - encrypt_user_key: User-specific key encrypted successfully: %s", encrypted_user_key)
+            return encrypted_user_key
+        except Exception as e:
+            logging.exception("CLASS CryptoHandler - encrypt_user_key: Exception occurred during encryption: %s", e)
+            return None
 
     @staticmethod
     def decrypt_user_key(encrypted_user_key: bytes, main_key: bytes) -> bytes:
         """Decrypt a user-specific key using the main encryption key."""
-        logging.debug("CLASS CryptoHandler - decrypt_user_key: Decrypting encrypted user-specific key.")
-        fernet = Fernet(main_key)
-        decrypted_user_key = fernet.decrypt(encrypted_user_key)
-        logging.debug("CLASS CryptoHandler - decrypt_user_key: Encrypted user-specific key decrypted successfully.")
-        return decrypted_user_key
+        logging.debug("CLASS CryptoHandler - decrypt_user_key: Starting method.")
+        try:
+            logging.debug("CLASS CryptoHandler - decrypt_user_key: Main key: %s", main_key)
+            fernet = Fernet(main_key)
+            decrypted_user_key = fernet.decrypt(encrypted_user_key)
+            logging.debug("CLASS CryptoHandler - decrypt_user_key: Encrypted user-specific key decrypted successfully: %s", decrypted_user_key)
+            return decrypted_user_key
+        except Exception as e:
+            logging.exception("CLASS CryptoHandler - decrypt_user_key: Exception occurred during decryption: %s", e)
+            return None
 
     @staticmethod
     def encrypt_detail_with_key(detail: str, user_key: bytes) -> bytes:
         """Encrypts a detail (like a name) using a user-specific key."""
-        logging.debug(f"CLASS CryptoHandler - encrypt_detail_with_key: Encrypting detail: {detail}.")
-        fernet = Fernet(user_key)
-        encrypted_detail = fernet.encrypt(detail.encode('utf-8'))
-        logging.debug("CLASS CryptoHandler - encrypt_detail_with_key: Detail encrypted successfully.")
-        return encrypted_detail
+        logging.debug(f"CLASS CryptoHandler - encrypt_detail_with_key: Starting method.")
+        try:
+            logging.debug(f"CLASS CryptoHandler - encrypt_detail_with_key: Detail to encrypt: {detail}")
+            fernet = Fernet(user_key)
+            encrypted_detail = fernet.encrypt(detail.encode('utf-8'))
+            logging.debug("CLASS CryptoHandler - encrypt_detail_with_key: Detail encrypted successfully: %s", encrypted_detail)
+            return encrypted_detail
+        except Exception as e:
+            logging.exception("CLASS CryptoHandler - encrypt_detail_with_key: Exception occurred during encryption: %s", e)
+            return None
 
     @staticmethod
     def decrypt_detail_with_key(encrypted_detail: bytes, user_key: bytes) -> str:
         """Decrypts an encrypted detail using a user-specific key."""
-        logging.debug("CLASS CryptoHandler - decrypt_detail_with_key: Decrypting encrypted detail.")
-        fernet = Fernet(user_key)
-        decrypted_detail = fernet.decrypt(encrypted_detail).decode('utf-8')
-        logging.debug(f"CLASS CryptoHandler - decrypt_detail_with_key: Encrypted detail decrypted to: {decrypted_detail}.")
-        return decrypted_detail
+        logging.debug("CLASS CryptoHandler - decrypt_detail_with_key: Starting method.")
+        try:
+            logging.debug("CLASS CryptoHandler - decrypt_detail_with_key: Decrypting encrypted detail.")
+            fernet = Fernet(user_key)
+            decrypted_detail = fernet.decrypt(encrypted_detail).decode('utf-8')
+            logging.debug(f"CLASS CryptoHandler - decrypt_detail_with_key: Encrypted detail decrypted to: {decrypted_detail}.")
+            return decrypted_detail
+        except Exception as e:
+            logging.exception("CLASS CryptoHandler - decrypt_detail_with_key: Exception occurred during decryption: %s", e)
+            return None
 
     
 class SessionManager:
@@ -305,25 +329,33 @@ class SessionManager:
         """Create the sessions table if it doesn't already exist."""
         logging.debug("CLASS SessionManager - create_sessions_table: Starting process to check or create sessions table.")
         
-        with sqlite3.connect(self.db_name) as connection:
-            cursor = connection.cursor()
-            logging.debug("CLASS SessionManager - create_sessions_table: Database connection established. Preparing SQL statement for sessions table.")
-            
-            cursor.execute("""
-            CREATE TABLE IF NOT EXISTS sessions (
-                session_id TEXT PRIMARY KEY,
-                username TEXT,
-                role TEXT,
-                expiration TEXT
-            )
-            """)
-            logging.debug("CLASS SessionManager - create_sessions_table: SQL statement executed. Checking if table was created or already existed.")
-            
-            connection.commit()
-            logging.debug("CLASS SessionManager - create_sessions_table: Changes committed to the database.")
-        
-        logging.info("CLASS SessionManager - create_sessions_table: Sessions table check and creation process completed successfully.")
-
+        try:
+            with sqlite3.connect(self.db_name) as connection:
+                logging.debug("CLASS SessionManager - create_sessions_table: Database connection established.")
+                cursor = connection.cursor()
+                
+                logging.debug("CLASS SessionManager - create_sessions_table: Preparing SQL statement for sessions table creation.")
+                create_table_sql = """
+                CREATE TABLE IF NOT EXISTS sessions (
+                    session_id TEXT PRIMARY KEY,
+                    username TEXT,
+                    role TEXT,
+                    expiration TEXT
+                )
+                """
+                
+                cursor.execute(create_table_sql)
+                logging.debug("CLASS SessionManager - create_sessions_table: SQL statement executed.")
+                
+                connection.commit()
+                logging.debug("CLASS SessionManager - create_sessions_table: Changes committed to the database.")
+                
+                logging.info("CLASS SessionManager - create_sessions_table: Sessions table check and creation process completed successfully.")
+                
+        except sqlite3.Error as e:
+            logging.error("CLASS SessionManager - create_sessions_table: SQLite error occurred: %s", e)
+        except Exception as ex:
+            logging.error("CLASS SessionManager - create_sessions_table: An unexpected error occurred: %s", ex)
             
     def validate_session(self, session_id: str) -> tuple:
         """Validates the session and returns a tuple of (is_valid, role)"""
