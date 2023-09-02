@@ -613,7 +613,7 @@ class App:
 
             # Log the successful login event to the chat database
             with ChatDatabase() as db:
-                db.insert_message(username, "User logged in", "system")
+                db.insert_message(username, "User logged in", "system", "Logged in successfully")
 
             logging.debug(f"Current Session ID = {self.current_session}")
             logging.debug(f"Current User Role = {self.current_user_role}")

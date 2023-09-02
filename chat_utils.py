@@ -302,15 +302,34 @@ class ChatSession:
         
         - exit: Safely terminate the current chat session and exit the Chat Interface and go to the Main Settings Menu.
 
-        Note: Always type commands without quotes.
+        Note: Always type commands without quotes or slashes.
         """)
 
     def _fetch_recent_logs(self):
+        """
+        Fetch and display the last 25 log messages from the logging module 
+        and the last 25 messages from the chat database.
+        """
+        
         # Fetch the last 25 log messages from the logging module
         for handler in logging.root.handlers:
             if isinstance(handler, logging.StreamHandler) and handler.stream is log_stream:
                 logs = log_stream.getvalue().split('\n')[-25:]
+                print("=== Last 25 Log Messages ===")
                 print('\n'.join(logs))
+                print("="*30)
+        
+        # Fetch the last 25 messages from the chat database
+        try:
+            db = Database()
+            recent_messages = db.get_last_n_messages(25, self.user_name)  # use self.user_name
+            print("=== Last 25 Chat Messages ===")
+            for message in recent_messages:
+                print(message)
+            print("="*30)
+        except Exception as e:
+            print(f"Error fetching messages from the database: {e}")
+
 
     def _exit_session(self):
         print("Thank you for chatting! Goodbye!")
