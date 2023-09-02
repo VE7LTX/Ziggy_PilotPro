@@ -19,7 +19,7 @@ The PilotPro project is a comprehensive solution built using Python, designed to
       - [`chat_db.py`: Chat Database Management (PilotPro)](#chat_dbpy-chat-database-management-pilotpro)
       - [`chat_utils.py`: Utility Functions for Chat Enhancement](#chat_utilspy-utility-functions-for-chat-enhancement)
       - [`regi.py`: Registration and Encryption Utilities](#regipy-registration-and-encryption-utilities)
-      - [`Other Files and Modules`](#other-files-and-modules)
+      - [Other Files and Modules](#other-files-and-modules)
   - [Setup \& Installation](#setup--installation)
   - [Usage](#usage)
   - [Application User Experience (UX)](#application-user-experience-ux)
@@ -230,9 +230,44 @@ This module handles user registration, authentication, session management, and e
 - **Date**: September 2, 2023
 - **Company**: VE7LTX Diagonal Thinking LTD
 
-#### `Other Files and Modules`
+#### Other Files and Modules
+The project contains several other important files, classes, and functions that are crucial for its functionality:
 
-While the above details are based on our discussions, it's likely that the project has other important files, classes, and functions that haven't been explicitly discussed. Ensure to document those as well to provide a comprehensive understanding of the codebase.
+- **DB**: This folder contains the databases used in the project.
+  - `chat.db`: Database containing chat-related data.
+  - `users.db`: Database containing user-related data.
+
+- **venv**: This folder contains the virtual environment for the project.
+
+- **.env**: This file contains environment variables required for the project.
+
+- **.gitignore**: This file specifies the files and directories that should be ignored by Git.
+
+- **chat_db.py**: This file contains classes and functions for managing the chat database. For more details, refer to the chat_db.py section.
+
+- **chat_utils.py**: This file contains utility functions for chat enhancement. For more details, refer to the chat_utils.py section.
+
+- **constants.py**: This file contains the constant values used throughout the project.
+
+- **filetree.py**: This file contains the code for generating the file tree of the project.
+
+- **next steps.ipynb**: This Jupyter notebook contains the next steps and plans for the project.
+
+- **ps.ps1**: This PowerShell script contains utility functions for the project.
+
+- **README.md**: This file contains the documentation of the project.
+
+- **regi.py**: This file contains classes and functions for user authentication and chat application. For more details, refer to the regi.py section.
+
+- **requirements.txt**: This file contains the list of packages required to run the project.
+
+- **send_message_to_pai.py**: This file contains the code for sending messages to Personal.AI.
+
+- **template_constants.py**: This file contains the template for the constants.py file.
+
+- **template.env**: This file contains the template for the .env file.
+
+- **test_username_decrypt.py**: This file contains the code for testing username decryption.
 
 ## Setup & Installation
 
