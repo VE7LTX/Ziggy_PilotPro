@@ -61,51 +61,126 @@ class ContextManager:
 
     def generate_context(self, username: str) -> str:
         """Generate context based on the last 5 message pairs in history and any custom context."""
-        logging.debug(f"generate_context DEBUG Generating context for username: {username}")
-        recent_interactions = self.db.get_last_n_messages(10, username)
-        logging.debug(f"generate_context DEBUG Recent interactions: {recent_interactions}")
+        
+        # Logging the start of the method with input details.
+        logging.debug(f"generate_context DEBUG Starting method. Generating context for username: {username}")
+        
+        # Attempting to retrieve recent interactions.
+        try:
+            recent_interactions = self.db.get_last_n_messages(10, username)
+            
+            # Log a warning if no recent interactions are found for the given user.
+            if not recent_interactions:
+                logging.warning(f"generate_context DEBUG No recent interactions found for username: {username}")
+                
+            logging.debug(f"generate_context DEBUG Recent interactions retrieved for username {username}: {recent_interactions}")
+            
+        except Exception as e:
+            # Log detailed error information if there's an exception while retrieving recent interactions.
+            logging.error(f"generate_context DEBUG Error retrieving recent interactions for username {username}")
+            logging.error("Exception Type: %s", type(e).__name__)
+            logging.error("Exception Args: %s", e.args)
+            logging.error("Recommendation: Check the get_last_n_messages method and the database connection.")
+            recent_interactions = []
+        
+        # Constructing the context string.
         context = f"".join(recent_interactions)
         context += f"{self.custom_context}"
-        logging.debug(f"generate_context DEBUG Context: {context}")
+        
+        # Logging the final constructed context.
+        logging.debug(f"generate_context DEBUG Final constructed context for username {username}: {context}")
+        
         return context
 
-    
-# TODO - add date and time to context if keywords for date and time are found in the last message inputted by the user
 
+    # TODO - add date and time to context if keywords for date and time are found in the last message inputted by the user
+    
     def add_custom_context(self, custom_context: str) -> None:
         """Add custom context."""
-        self.custom_context += f"Your an amazing AI Lifeform, Called Pilot Pro, your job is to help as best you can with simple instructions and complete info. {custom_context}"
+        
+        # Logging the start of the method with the input details.
+        logging.debug(f"CLASS ContextManager - add_custom_context: Starting method. Attempting to add custom context: {custom_context}")
+        
+        # Try to add the custom context to the existing context.
+        try:
+            self.custom_context += f"Your an amazing AI Lifeform, Called Pilot Pro, your job is to help as best you can with simple instructions and complete info. {custom_context}"
+            
+            # Log the success of adding the custom context.
+            logging.info(f"CLASS ContextManager - add_custom_context: Successfully added custom context: {custom_context}")
+            
+        except Exception as e:
+            # Log detailed error information if there's an exception while adding custom context.
+            logging.error(f"CLASS ContextManager - add_custom_context: Error adding custom context.")
+            logging.error("Exception Type: %s", type(e).__name__)
+            logging.error("Exception Args: %s", e.args)
+            logging.error("Recommendation: Check the custom_context input and ensure it's a valid string.")
+        
+        # Log the final state of the custom context.
+        logging.debug(f"CLASS ContextManager - add_custom_context: Final state of custom context: {self.custom_context}")
+
+
 
     def add_name_context(self, name: str) -> None:
         """Add the user's name to the context."""
+        logging.debug(f"CLASS ContextManager - add_name_context: Adding name {name} to context.")
         self.add_custom_context(f"The user's name is {name}.")
+        logging.info(f"CLASS ContextManager - add_name_context: Name context added.")
 
     def add_current_time_context(self) -> None:
         """Add the current time to the context."""
         current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        logging.debug(f"CLASS ContextManager - add_current_time_context: Adding current time {current_time} to context.")
         self.add_custom_context(f"The current time is {current_time}.")
+        logging.info(f"CLASS ContextManager - add_current_time_context: Current time context added.")
 
     def add_last_session_time_context(self, last_session_time: str) -> None:
         """Add the time of the last session to the context."""
+        logging.debug(f"CLASS ContextManager - add_last_session_time_context: Adding last session time {last_session_time} to context.")
         self.add_custom_context(f"The last session was at {last_session_time}.")
+        logging.info(f"CLASS ContextManager - add_last_session_time_context: Last session time context added.")
 
     def add_last_message_context(self, last_message_sent: str, last_message_received: str) -> None:
         """Add the last message sent and received to the context."""
+        logging.debug(f"CLASS ContextManager - add_last_message_context: Adding last messages to context.")
         self.add_custom_context(f"The last message sent was: {last_message_sent}")
         self.add_custom_context(f"The last message received was: {last_message_received}")
+        logging.info(f"CLASS ContextManager - add_last_message_context: Last message context added.")
 
     def add_last_n_messages_context(self, n: int, username: str) -> None:
         """Add the last n messages to the context."""
-        last_n_messages = self.db.get_last_n_messages(n, username)
-        self.add_custom_context("\n".join(last_n_messages))
+        
+        # Logging the start of the method with input details.
+        logging.debug(f"CLASS ContextManager - add_last_n_messages_context: Starting method. Attempting to add the last {n} messages for {username} to context.")
+        
+        try:
+            # Fetch the last n messages.
+            last_n_messages = self.db.get_last_n_messages(n, username)
+            
+            # Log the fetched messages.
+            logging.debug(f"CLASS ContextManager - add_last_n_messages_context: Fetched the last {n} messages for {username}: {last_n_messages}")
+            
+            # Add the fetched messages to the custom context.
+            self.add_custom_context("\n".join(last_n_messages))
+            
+            # Log the success of adding the last n messages to the context.
+            logging.info(f"CLASS ContextManager - add_last_n_messages_context: Successfully added the last {n} messages for {username} to context.")
+            
+        except Exception as e:
+            # Log detailed error information if there's an exception while adding the last n messages to the context.
+            logging.error(f"CLASS ContextManager - add_last_n_messages_context: Error adding the last {n} messages for {username} to context.")
+            logging.error("Exception Type: %s", type(e).__name__)
+            logging.error("Exception Args: %s", e.args)
+            logging.error("Recommendation: Check the database connection and ensure the structure of the 'chat_sessions' table matches the query.")
+        
+        # Log the final state of the custom context.
+        logging.debug(f"CLASS ContextManager - add_last_n_messages_context: Final state of custom context: {self.custom_context}")
 
 
     def add_last_session_messages_context(self, username: str) -> None:
         """Add the last two message pairs from the last session to the context."""
-        # You'll need to modify this method to get the last two message pairs from the last session.
+        # Placeholder for the logic to get the last two message pairs from the last session.
         # This will depend on how you're storing sessions in your database.
-        pass
-
+        logging.warning("CLASS ContextManager - add_last_session_messages_context: Method not yet implemented.")
 
 
     # More context manipulation methods can be added here.

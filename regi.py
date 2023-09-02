@@ -68,6 +68,7 @@ import datetime
 import os
 import sqlite3
 import bcrypt
+import logging
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv, set_key
 from typing import Optional, Union
@@ -93,48 +94,65 @@ class Database:
 
     def __init__(self, db_name=DEFAULT_DB_NAME):
         self.db_name = db_name
+        logging.debug(f"CLASS Database - __init__: Initializing Database with database name: {db_name}")
         if not os.path.exists(".\\DB"):
             os.makedirs(".\\DB")
+            logging.debug(f"CLASS Database - __init__: Created database directory: .\\DB")
+        else:
+            logging.debug(f"CLASS Database - __init__: Database directory .\\DB already exists.")
         self.create_connection()
 
     def create_connection(self):
         """Create a database connection and return the connection object."""
+        logging.debug(f"CLASS Database - create_connection: Attempting to create connection to database: {self.db_name}")
         try:
             conn = sqlite3.connect(self.db_name)
+            logging.debug(f"CLASS Database - create_connection: Successfully connected to the database: {self.db_name}")
             return conn
         except sqlite3.Error as e:
+            logging.exception(f"CLASS Database - create_connection: sqlite3 Error while connecting to {self.db_name}")
             print(e)
 
     def execute_query(self, query: str, parameters: tuple = ()):
         """Execute a single query."""
+        logging.debug(f"CLASS Database - execute_query: Attempting to execute query: {query} with parameters: {parameters}")
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             cursor.execute(query, parameters)
             conn.commit()
+            logging.debug(f"CLASS Database - execute_query: Query executed successfully on {self.db_name}")
 
     def fetch_one(self, query: str, parameters: tuple = ()) -> Union[tuple, None]:
         """Fetch a single record from the database."""
+        logging.debug(f"CLASS Database - fetch_one: Fetching one record using query: {query} with parameters: {parameters}")
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             cursor.execute(query, parameters)
-            return cursor.fetchone()
+            result = cursor.fetchone()
+            logging.debug(f"CLASS Database - fetch_one: Fetched record: {result}")
+            return result
 
     def fetch_all(self, query: str, parameters: tuple = ()) -> list:
         """Fetch all records from the database."""
+        logging.debug(f"CLASS Database - fetch_all: Fetching all records using query: {query} with parameters: {parameters}")
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             cursor.execute(query, parameters)
-            return cursor.fetchall()
+            results = cursor.fetchall()
+            logging.debug(f"CLASS Database - fetch_all: Fetched {len(results)} records from {self.db_name}")
+            return results
 
 
 class RegiDatabase(Database):
     def __init__(self, db_name=DEFAULT_DB_NAME):
+        logging.debug(f"CLASS RegiDatabase - __init__: Initializing RegiDatabase with database name: {db_name}")
         super().__init__(db_name)
         self.create_encryption_keys_table()
         self.create_users_table()  # Ensure that the users table is created on initialization
 
     def create_encryption_keys_table(self):
         """Create the encryption_keys table if it doesn't exist."""
+        logging.debug("CLASS RegiDatabase - create_encryption_keys_table: Attempting to create encryption_keys table.")
         with sqlite3.connect(self.db_name) as connection:
             cursor = connection.cursor()
             cursor.execute("""
@@ -144,24 +162,33 @@ class RegiDatabase(Database):
                 )
             """)
             connection.commit()
+            logging.debug("CLASS RegiDatabase - create_encryption_keys_table: encryption_keys table created/check completed.")
 
     def store_encrypted_user_key(self, username: str, encrypted_user_key: bytes):
         """Store the encrypted user-specific key in the database."""
+        logging.debug(f"CLASS RegiDatabase - store_encrypted_user_key: Storing encrypted user key for username: {username}")
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             cursor.execute("INSERT OR REPLACE INTO encryption_keys (username, encrypted_user_key) VALUES (?, ?)",
                            (username, encrypted_user_key))
             conn.commit()
+            logging.debug(f"CLASS RegiDatabase - store_encrypted_user_key: Encrypted user key stored for username: {username}")
 
     def fetch_encrypted_user_key(self, username: str) -> Union[bytes, None]:
         """Fetch the encrypted user-specific key from the database."""
+        logging.debug(f"CLASS RegiDatabase - fetch_encrypted_user_key: Fetching encrypted user key for username: {username}")
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT encrypted_user_key FROM encryption_keys WHERE username = ?", (username,))
             encrypted_user_key = cursor.fetchone()
-        return encrypted_user_key[0] if encrypted_user_key else None
+            if encrypted_user_key:
+                logging.debug(f"CLASS RegiDatabase - fetch_encrypted_user_key: Encrypted user key fetched for username: {username}")
+            else:
+                logging.warning(f"CLASS RegiDatabase - fetch_encrypted_user_key: No encrypted user key found for username: {username}")
+            return encrypted_user_key[0] if encrypted_user_key else None
 
     def create_users_table(self):
+        logging.debug("CLASS RegiDatabase - create_users_table: Attempting to create users table.")
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             cursor.execute('''
@@ -177,89 +204,111 @@ class RegiDatabase(Database):
                 )
             ''')
             conn.commit()
-                
+            logging.debug("CLASS RegiDatabase - create_users_table: users table created/check completed.")
+
     def decrypt_data(self, encrypted_data: bytes, username: str) -> str:
         """
         Decrypts user details using the CryptoHandler.
-
-        Args:
-            encrypted_data (bytes): The encrypted data to be decrypted.
-            username (str): The username associated with the encrypted data.
-
-        Returns:
-            str: The decrypted data as a string.
-
-        Raises:
-            ValueError: If no encryption key is found for the user.
         """
+        logging.debug(f"CLASS RegiDatabase - decrypt_data: Decrypting data for username: {username}")
         encrypted_user_key = self.fetch_encrypted_user_key(username)
         if not encrypted_user_key:
+            logging.error(f"CLASS RegiDatabase - decrypt_data: No encryption key found for user {username}.")
             raise ValueError("No encryption key found for user.")
 
         user_key = CryptoHandler.decrypt_user_key(encrypted_user_key, KEY)
-        return CryptoHandler.decrypt_detail_with_key(encrypted_data, user_key)
-
-
+        decrypted_data = CryptoHandler.decrypt_detail_with_key(encrypted_data, user_key)
+        logging.debug(f"CLASS RegiDatabase - decrypt_data: Successfully decrypted data for username: {username}")
+        return decrypted_data
+    
+    
 class CryptoHandler:
     @staticmethod
     def generate_user_key():
         """Generate a new encryption key for a user."""
-        return Fernet.generate_key()
+        logging.debug("CLASS CryptoHandler - generate_user_key: Generating new encryption key for a user.")
+        user_key = Fernet.generate_key()
+        logging.debug("CLASS CryptoHandler - generate_user_key: Encryption key generated successfully.")
+        return user_key
 
     @staticmethod
     def encrypt_user_key(user_key: bytes, main_key: bytes) -> bytes:
         """Encrypt a user-specific key using the main encryption key."""
+        logging.debug("CLASS CryptoHandler - encrypt_user_key: Encrypting user-specific key.")
         fernet = Fernet(main_key)
-        return fernet.encrypt(user_key)
+        encrypted_user_key = fernet.encrypt(user_key)
+        logging.debug("CLASS CryptoHandler - encrypt_user_key: User-specific key encrypted successfully.")
+        return encrypted_user_key
 
     @staticmethod
     def decrypt_user_key(encrypted_user_key: bytes, main_key: bytes) -> bytes:
         """Decrypt a user-specific key using the main encryption key."""
+        logging.debug("CLASS CryptoHandler - decrypt_user_key: Decrypting encrypted user-specific key.")
         fernet = Fernet(main_key)
-        return fernet.decrypt(encrypted_user_key)
-    
+        decrypted_user_key = fernet.decrypt(encrypted_user_key)
+        logging.debug("CLASS CryptoHandler - decrypt_user_key: Encrypted user-specific key decrypted successfully.")
+        return decrypted_user_key
+
     @staticmethod
     def encrypt_detail_with_key(detail: str, user_key: bytes) -> bytes:
         """Encrypts a detail (like a name) using a user-specific key."""
+        logging.debug(f"CLASS CryptoHandler - encrypt_detail_with_key: Encrypting detail: {detail}.")
         fernet = Fernet(user_key)
-        return fernet.encrypt(detail.encode('utf-8'))
+        encrypted_detail = fernet.encrypt(detail.encode('utf-8'))
+        logging.debug("CLASS CryptoHandler - encrypt_detail_with_key: Detail encrypted successfully.")
+        return encrypted_detail
 
     @staticmethod
     def decrypt_detail_with_key(encrypted_detail: bytes, user_key: bytes) -> str:
         """Decrypts an encrypted detail using a user-specific key."""
+        logging.debug("CLASS CryptoHandler - decrypt_detail_with_key: Decrypting encrypted detail.")
         fernet = Fernet(user_key)
-        return fernet.decrypt(encrypted_detail).decode('utf-8')
-
+        decrypted_detail = fernet.decrypt(encrypted_detail).decode('utf-8')
+        logging.debug(f"CLASS CryptoHandler - decrypt_detail_with_key: Encrypted detail decrypted to: {decrypted_detail}.")
+        return decrypted_detail
 
     
 class SessionManager:
     """Handles user session management."""
     def __init__(self, db_name: str):
         self.db_name = db_name
+        logging.debug(f"CLASS SessionManager: Beginning initialization with database: {db_name}")
         self.create_sessions_table()
+        logging.debug(f"CLASS SessionManager: Completed initialization with database: {db_name}")
+
 
     def create_session(self, username: str, role: str) -> tuple[str, str]:
+        logging.debug(f"CLASS SessionManager - create_session: Starting session creation for username: {username} with role: {role}")
+        
         session_id = str(uuid.uuid4())
+        logging.debug(f"CLASS SessionManager - create_session: Generated session ID: {session_id}")
+        
         expiration = (datetime.datetime.now() + 
-                      datetime.timedelta(minutes=SESSION_DURATION)).strftime('%Y-%m-%d %H:%M:%S')
+                    datetime.timedelta(minutes=SESSION_DURATION)).strftime('%Y-%m-%d %H:%M:%S')
+        logging.debug(f"CLASS SessionManager - create_session: Calculated expiration time for session: {expiration}")
+        
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
+            logging.debug(f"CLASS SessionManager - create_session: Preparing to insert session details into database")
             cursor.execute(
                 "INSERT INTO sessions (session_id, username, role, expiration) VALUES (?, ?, ?, ?)", 
                 (session_id, username, role, expiration)
             )
             conn.commit()
+            logging.debug(f"CLASS SessionManager - create_session: Session details inserted into the database successfully")
         
-        # Log the session creation event to the chat database
-        with ChatDatabase() as db:
-            db.insert_message(username, f"Session {session_id} created", "system")
-
+        logging.info(f"CLASS SessionManager - create_session: Session created successfully for username: {username} with session ID: {session_id} and expiration: {expiration}")
         return session_id, username
+
     
     def create_sessions_table(self):
         """Create the sessions table if it doesn't already exist."""
+        logging.debug("CLASS SessionManager - create_sessions_table: Starting process to check or create sessions table.")
+        
         with sqlite3.connect(self.db_name) as connection:
             cursor = connection.cursor()
+            logging.debug("CLASS SessionManager - create_sessions_table: Database connection established. Preparing SQL statement for sessions table.")
+            
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
                 session_id TEXT PRIMARY KEY,
@@ -268,10 +317,17 @@ class SessionManager:
                 expiration TEXT
             )
             """)
+            logging.debug("CLASS SessionManager - create_sessions_table: SQL statement executed. Checking if table was created or already existed.")
+            
             connection.commit()
+            logging.debug("CLASS SessionManager - create_sessions_table: Changes committed to the database.")
+        
+        logging.info("CLASS SessionManager - create_sessions_table: Sessions table check and creation process completed successfully.")
+
             
     def validate_session(self, session_id: str) -> tuple:
         """Validates the session and returns a tuple of (is_valid, role)"""
+        logging.debug(f"CLASS SessionManager - validate_session: Validating session with session ID: {session_id}")
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT expiration, role FROM sessions WHERE session_id=?", (session_id,))
@@ -280,38 +336,62 @@ class SessionManager:
         if session:
             expiration = datetime.datetime.strptime(session[0], '%Y-%m-%d %H:%M:%S')
             if datetime.datetime.now() > expiration:
+                logging.warning(f"CLASS SessionManager - validate_session: Session {session_id} has expired.")
                 self.terminate_session(session_id)
                 return (False, None)
+            logging.debug(f"CLASS SessionManager - validate_session: Session {session_id} is valid.")
             return (True, session[1])
+        logging.warning(f"CLASS SessionManager - validate_session: No session found with session ID: {session_id}.")
         return (False, None)
 
     def terminate_session(self, session_id: str):
         """Deletes the session from the database."""
+        logging.debug(f"CLASS SessionManager - terminate_session: Initiating termination process for session with ID: {session_id}")
+        
         with sqlite3.connect(self.db_name) as conn:
+            logging.debug(f"CLASS SessionManager - terminate_session: Successfully connected to the database: {self.db_name}")
+            
             cursor = conn.cursor()
+            logging.debug("CLASS SessionManager - terminate_session: Cursor created. Preparing to execute DELETE statement.")
             
             # Ensure session_id is passed as a single-element tuple
             params = (session_id,)
             cursor.execute("DELETE FROM sessions WHERE session_id=?", params)
+            logging.debug(f"CLASS SessionManager - terminate_session: DELETE statement executed for session ID: {session_id}. Preparing to commit changes.")
             
             conn.commit()
+            logging.debug(f"CLASS SessionManager - terminate_session: Changes committed to the database. Session with ID: {session_id} has been removed.")
+        
+        logging.info(f"CLASS SessionManager - terminate_session: Termination process completed for session with ID: {session_id}.")
 
 
 class UserManager:
     def __init__(self, db: RegiDatabase):
+        logging.debug("CLASS UserManager: Initializing UserManager class.")
         self.db = db
+        logging.debug(f"CLASS UserManager: Database object of type {type(db)} assigned to the instance.")
+        
         self.crypto_handler = CryptoHandler()
+        logging.debug(f"CLASS UserManager: CryptoHandler object of type {type(self.crypto_handler)} created and assigned to the instance.")
+        
+        logging.info("CLASS UserManager: UserManager initialized successfully.")
 
     def register_user(self, username: str, password: str, full_name: str, email: str, role: str):
         """Register a new user with the given details."""
+        logging.debug(f"CLASS UserManager - register_user: Starting user registration for username: {username}")
+
         if role not in ROLES:
+            logging.error(f"CLASS UserManager - register_user: Invalid role provided: {role}")
             raise ValueError(f"Invalid role provided: {role}. Valid roles are {', '.join(ROLES)}.")
 
         with sqlite3.connect(self.db.db_name) as conn:
             cursor = conn.cursor()
 
             names = full_name.split()
+            logging.debug(f"CLASS UserManager - register_user: Splitting full name into: {names}")
+
             user_key = self.crypto_handler.generate_user_key()  # Generate user-specific key
+            logging.debug(f"CLASS UserManager - register_user: User-specific key generated for username: {username}")
 
             encrypted_first_name = CryptoHandler.encrypt_detail_with_key(names[0], user_key)
             encrypted_last_name = CryptoHandler.encrypt_detail_with_key(names[-1], user_key)
@@ -319,20 +399,25 @@ class UserManager:
             hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
             encrypted_email = CryptoHandler.encrypt_detail_with_key(email, user_key)
             encrypted_full_name = CryptoHandler.encrypt_detail_with_key(full_name, user_key)
+            
+            logging.debug(f"CLASS UserManager - register_user: All user details encrypted for username: {username}")
 
             try:
                 cursor.execute("INSERT INTO users (username, password, role, encrypted_first_name, encrypted_middle_name, encrypted_last_name, encrypted_full_name, encrypted_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
-                               (username, hashed_password, role, encrypted_first_name, encrypted_middle_name, encrypted_last_name, encrypted_full_name, encrypted_email))
+                            (username, hashed_password, role, encrypted_first_name, encrypted_middle_name, encrypted_last_name, encrypted_full_name, encrypted_email))
                 conn.commit()
 
                 # Encrypt and store the user-specific key
                 encrypted_user_key = self.crypto_handler.encrypt_user_key(user_key, KEY)
                 self.db.store_encrypted_user_key(username, encrypted_user_key)
 
+                logging.info(f"CLASS UserManager - register_user: User {full_name} registered successfully!")
                 print(f"User {full_name} registered successfully!")
                 return True
             except sqlite3.IntegrityError:
+                logging.error(f"CLASS UserManager - register_user: Registration failed due to IntegrityError for username: {username}")
                 return False
+
 
     def authenticate_user(self, username: str, password: str) -> Optional[tuple]:
         """Authenticate the user and return their full name and role if successful."""
@@ -487,19 +572,24 @@ class App:
         user = self.user_manager.authenticate_user(username, password)
         if user:
             decrypted_full_name = user[0]
-            print(f"Hello {decrypted_full_name}! (Full name: {decrypted_full_name})")
+            logging.info(f"Hello {decrypted_full_name}! (Full name: {decrypted_full_name})")
             self.decrypted_full_name = decrypted_full_name  # Store it as an instance variable
-                    
+
             self.current_user_role = user[1]
             self.current_session = self.session_manager.create_session(username, self.current_user_role)
-            
+
             # Log the successful login event to the chat database
             with ChatDatabase() as db:
                 db.insert_message(username, "User logged in", "system")
 
-            print(f"Debug: Current Session ID = {self.current_session}")
-            print(f"Debug: Current User Role = {self.current_user_role}")
+            logging.debug(f"Current Session ID = {self.current_session}")
+            logging.debug(f"Current User Role = {self.current_user_role}")
+
+            # Set logging level to DEBUG for admin users
+            if self.current_user_role == "admin":
+                logging.getLogger().setLevel(logging.DEBUG)
         else:
+            logging.warning("Login failed for username: %s", username)  # Log warning for failed login
             print("Login failed.")
 
     def change_password(self):
