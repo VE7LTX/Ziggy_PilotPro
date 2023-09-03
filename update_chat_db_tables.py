@@ -14,35 +14,29 @@ def backup_database(original_path: str, backup_dir: str):
     # Copy the original database to the backup directory
     shutil.copy2(original_path, backup_path)
 
-def create_messages_table_in_local_db(db_path: str):
-    """Create the messages table in the local SQLite database."""
+def add_response_encrypted_column_to_chat_sessions(db_path: str):
+    """Add the response_encrypted column to the chat_sessions table in the local SQLite database."""
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    # Define the schema for the messages table
-    create_table_sql = """
-    CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY,
-        username TEXT NOT NULL,
-        message TEXT NOT NULL,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
+    # Define the SQL to add the response_encrypted column to the chat_sessions table
+    add_column_sql = """
+    ALTER TABLE chat_sessions
+    ADD COLUMN response_encrypted TEXT;
     """
     
-    cursor.execute(create_table_sql)
+    cursor.execute(add_column_sql)
     conn.commit()
     cursor.close()
     conn.close()
 
 # Paths
-# Paths
 db_path = r"DB\chat.db"
 backup_dir = r".\backup"
 
-
 # Backup and update the database
 backup_database(db_path, backup_dir)
-create_messages_table_in_local_db(db_path)
+add_response_encrypted_column_to_chat_sessions(db_path)
 
 print(f"Backed up the database to {backup_dir}")
 print("Updated the local database successfully!")

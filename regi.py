@@ -554,6 +554,8 @@ class App:
             self.handle_choice(choice)
 
     def handle_choice(self, choice):
+        logging.debug(f"CLASS App - handle_choice: Handling choice: {choice}")
+
         if not self.current_session:
             if choice == 'r':
                 self.register()
@@ -570,21 +572,25 @@ class App:
                 self.exit_app()
             elif choice == 's':
                 # Fetch user details using the current session's username
+                username = self.current_session[1]
+                logging.debug(f"CLASS App - handle_choice: Fetching encrypted full name for username: {username}")
+
                 with sqlite3.connect(self.db.db_name) as conn:
                     cursor = conn.cursor()
-                    cursor.execute("SELECT encrypted_full_name FROM users WHERE username=?", (self.current_session[1],))
+                    cursor.execute("SELECT encrypted_full_name FROM users WHERE username=?", (username,))
 
                     user_details = cursor.fetchone()
 
-                # Diagnostic print to check the fetched user_details
-                # print(f"Debug: Fetched user_details = {user_details}")
+                logging.debug(f"CLASS App - handle_choice: Fetched user_details = {user_details}")
 
                 if user_details:
-                    decrypted_full_name = self.db.decrypt_data(user_details[0], self.current_session[1])
-                    self.start_chat(decrypted_full_name)
+                    decrypted_full_name = self.db.decrypt_data(user_details[0], username)
+                    logging.debug(f"CLASS App - handle_choice: Decrypted full name for username {username}: {decrypted_full_name}")
+                    self.start_chat(username, decrypted_full_name)
                 else:
                     print("Error: User details not found.")
-                    
+                    logging.error(f"CLASS App - handle_choice: User details not found for username: {username}")
+                        
             elif self.current_user_role == 'admin':
                 if choice == 'd':
                     self.delete_user()
@@ -598,6 +604,7 @@ class App:
                 self.change_password()
             else:
                 print("Invalid choice. Please try again.")
+
 
     def login(self):
         username = input("Enter your username: ")
@@ -745,16 +752,21 @@ class App:
             print("Goodbye!")
         exit(0)
         
-    def start_chat(self, decrypted_full_name: str):
+
+    def start_chat(self, username: str, decrypted_full_name: str):
         """
         Initiates a chat session for the user.
         """
+        logging.debug(f"CLASS App - start_chat: Starting chat for username: {username} with decrypted full name: {decrypted_full_name}")
+
         if self.current_session:
-            chat_session = ChatSession(decrypted_full_name)
+            chat_session = ChatSession(username, decrypted_full_name)  # Assuming the ChatSession class can handle both arguments
             print(f"\n{decrypted_full_name} Impeccable Taste! I'm Calling up your Chat Interface Now. Please remember you can type 'help' for a list of commands at any time.")
             chat_session.start()
+            logging.debug(f"CLASS App - start_chat: Ended chat for username: {username}")
         else:
             print("Error: User not logged in.")
+            logging.error(f"CLASS App - start_chat: User not logged in while trying to start chat for username: {username}")
 
 
 if __name__ == "__main__":

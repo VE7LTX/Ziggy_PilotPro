@@ -1,0 +1,53 @@
+# Parsing the chat_db.py file to extract class and function names
+import ast
+
+class ClassAndFunctionVisitor(ast.NodeVisitor):
+    def __init__(self):
+        self.classes = []
+        self.functions = []
+
+    def visit_ClassDef(self, node):
+        self.classes.append(node.name)
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node):
+        self.functions.append(node.name)
+        self.generic_visit(node)
+
+# Parsing chat_db.py
+visitor_chat_db = ClassAndFunctionVisitor()
+tree_chat_db = ast.parse(chat_db_code)
+visitor_chat_db.visit(tree_chat_db)
+
+# Reading the content of the chat_utils.py file to understand its structure and functionality
+with open("/mnt/data/chat_utils.py", "r") as file:
+    chat_utils_code = file.read()
+
+# Parsing chat_utils.py
+visitor_chat_utils = ClassAndFunctionVisitor()
+tree_chat_utils = ast.parse(chat_utils_code)
+visitor_chat_utils.visit(tree_chat_utils)
+
+# Retrieving the database schema and table list using sqlite3
+import sqlite3
+
+# Connecting to the database
+conn = sqlite3.connect('/mnt/data/chat.db')
+cursor = conn.cursor()
+
+# Fetching the list of tables
+cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+tables = cursor.fetchall()
+table_names = [table[0] for table in tables]
+
+# Fetching the schema for each table
+schemas = {}
+for table in table_names:
+    cursor.execute(f"PRAGMA table_info({table});")
+    schema = cursor.fetchall()
+    column_details = [(column[1], column[2]) for column in schema]
+    schemas[table] = column_details
+
+conn.close()
+
+visitor_chat_db.classes, visitor_chat_db.functions, visitor_chat_utils.classes, visitor_chat_utils.functions, table_names, schemas

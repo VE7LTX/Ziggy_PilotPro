@@ -170,6 +170,46 @@ class ChatDatabase:
 
         logging.info(f"CLASS ChatDatabase - __exit__: Exited context management for database: {self.db_name}.")
 
+    def save_message(self, username: str, message: str, role: str):
+        """
+        Save a message to the database.
+
+        :param username: The username of the user.
+        :param message: The message to save.
+        :param role: The role of the sender (User or AI).
+        """
+        try:
+            logging.debug(f"save_message: Starting method with username={username}, message={message}, role={role}")
+
+            if self.conn:
+                logging.debug("save_message: Inside connection context manager")
+
+                insert_query = "INSERT INTO chat_sessions (username, message, role) VALUES (?, ?, ?)"
+                logging.debug(f"save_message: Prepared insert query: {insert_query}")
+
+                insert_values = (username, message, role)
+                logging.debug(f"save_message: Prepared insert values: {insert_values}")
+
+                self.conn.execute(insert_query, insert_values)
+                logging.debug("save_message: Message inserted into database")
+
+            else:
+                logging.error("save_message: No active connection to the database")
+
+        except sqlite3.OperationalError as oe:
+            logging.error(f"save_message: Operational Error occurred: {oe}")
+            logging.debug("save_message: Checking if database file is accessible and not locked by another process.")
+
+        except sqlite3.Error as e:
+            logging.error(f"save_message: sqlite3 Error occurred: {e}")
+            logging.debug("save_message: Verifying database file integrity and structure.")
+
+        except Exception as e:
+            logging.exception(f"save_message: Unexpected Error occurred: {e}")
+            logging.debug("save_message: Checking environmental factors and external dependencies.")
+
+
+
     def open_connection(self):
         logging.debug(f"CLASS ChatDatabase - open_connection: Starting method to handle database connection.")
 
@@ -397,16 +437,15 @@ class ChatDatabase:
         finally:
             logging.debug(f"CLASS ChatDatabase - get_messages: Exiting method for user: {username}.")
 
-
-                
-    def get_last_n_messages(self, n: int, username: str) -> List[Tuple[str, str, str]]:
+    def get_last_n_messages(self, n: int, user_name: str, username: str) -> list:
         """
         Retrieve the last n messages for a given username along with the AI's response.
+        Enhanced with more detailed debugging logs.
         """
-        
+
         method_name = "get_last_n_messages"
         logging.debug(f"CLASS ChatDatabase - {method_name}: Method start.")
-        logging.debug(f"CLASS ChatDatabase - {method_name}: Input parameters - username: {username}, n: {n}.")
+        logging.debug(f"CLASS ChatDatabase - {method_name}: Input parameters - username: {user_name}, n: {n}.")
         
         # Check connection status
         if not self.conn:
@@ -417,29 +456,43 @@ class ChatDatabase:
             if not self.conn:
                 logging.error(f"CLASS ChatDatabase - {method_name}: Failed to reestablish connection. Exiting method.")
                 return []
+            else:
+                logging.debug(f"CLASS ChatDatabase - {method_name}: Connection reestablished successfully.")
         
         try:
             sql_query = "SELECT message, role, encrypted, response, response_encrypted FROM chat_sessions WHERE username = ? ORDER BY id DESC LIMIT ?"
             logging.debug(f"CLASS ChatDatabase - {method_name}: Prepared SQL query: {sql_query}.")
             
             with self.conn:
-                logging.debug(f"CLASS ChatDatabase - {method_name}: About to execute query with parameters.")
-                cursor = self.conn.execute(sql_query, (username, n))
-                messages = cursor.fetchall()
+                logging.debug(f"CLASS ChatDatabase - {method_name}: About to execute query with parameters - username: {user_name}, n: {n}.")
+                cursor = self.conn.execute(sql_query, (user_name, n))
                 
-                if not messages:
-                    logging.warning(f"CLASS ChatDatabase - {method_name}: No messages found for user: {username}.")
+                if cursor:
+                    messages = cursor.fetchall()
+                    logging.debug(f"CLASS ChatDatabase - {method_name}: Raw fetched messages: {messages}.")
+                    
+                    if not messages:
+                        logging.warning(f"CLASS ChatDatabase - {method_name}: No messages found for user: {user_name}.")
+                    else:
+                        logging.debug(f"CLASS ChatDatabase - {method_name}: Fetched {len(messages)} messages.")
+                    
+                    decrypted_messages = []
+                    for message, role, encrypted, response, response_encrypted in messages:
+                        decrypted_message = decrypt(message) if encrypted else message
+                        decrypted_response = decrypt(response) if response_encrypted else response
+                        
+                        # Logging decryption status and results
+                        logging.debug(f"CLASS ChatDatabase - {method_name}: Message decryption status - Encrypted: {encrypted}, Decrypted Message: {decrypted_message[:10]}...")
+                        logging.debug(f"CLASS ChatDatabase - {method_name}: Response decryption status - Encrypted: {response_encrypted}, Decrypted Response: {decrypted_response[:10]}...")
+                        
+                        decrypted_messages.append((decrypted_message, role, decrypted_response))
+                    
+                    logging.debug(f"CLASS ChatDatabase - {method_name}: Decrypted messages: {decrypted_messages}.")
+                    return decrypted_messages
                 else:
-                    logging.debug(f"CLASS ChatDatabase - {method_name}: Fetched {len(messages)} messages.")
+                    logging.error(f"CLASS ChatDatabase - {method_name}: Failed to initialize cursor.")
+                    return []
                 
-                decrypted_messages = [
-                    (decrypt(message) if encrypted else message, role, decrypt(response) if response_encrypted else response) 
-                    for message, role, encrypted, response, response_encrypted in messages
-                ]
-                logging.debug(f"CLASS ChatDatabase - {method_name}: Decrypted messages: {decrypted_messages}.")
-                
-                return decrypted_messages
-            
         except sqlite3.Error as e:
             logging.error(f"CLASS ChatDatabase - {method_name}: SQL error occurred - Type: {type(e).__name__}, Args: {e.args}.")
             return []
@@ -447,9 +500,7 @@ class ChatDatabase:
         finally:
             logging.debug(f"CLASS ChatDatabase - {method_name}: Finalizing method operations...")
             # If there are any other resources to close or finalize, they should be done here.
-            logging.info(f"CLASS ChatDatabase - {method_name}: Method execution complete for user: {username}.")
-
-
+            logging.info(f"CLASS ChatDatabase - {method_name}: Method execution complete for user: {user_name}.")
 
 
 
