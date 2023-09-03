@@ -42,9 +42,10 @@ Company: VE7LTX Diagonal Thinking LTD
 
 import requests
 from typing import Optional, List, Dict
-from constants import *
 from chat_db import ChatDatabase
 from chat_db import ChatDatabase as Database
+from constants import DOMAINNAME, BASE_URL, HEADERS, OPENAI_HEADERS, OPENAI_ENDPOINT
+
 
 import logging
 import io
@@ -56,264 +57,266 @@ import json
 log_stream = io.StringIO()
 logging.basicConfig(level=logging.DEBUG, stream=log_stream)
 
-
 class ContextManager:
     def __init__(self):
         self.db = Database()
-        self.custom_context = ""  # Initialize custom_context attribute
+        self.custom_context = "You are an amazing AI Lifeform, called Pilot Pro. Your job is to help as best you can with simple instructions and complete info."
+        self.username = ""
+        self.full_name = ""
 
-    def generate_context(self, username: str, decrypted_full_name: str) -> str:
-        logging.debug(f"generate_context DEBUG Starting method. Generating context for username: {username}")
+    def generate_context(self, username: str = None, full_name: str = None) -> str:
+        if username:
+            self.username = username
+        if full_name:
+            self.full_name = full_name
 
-        # Initialize an empty list for recent messages to handle potential exceptions.
+        logging.debug(f"generate_context DEBUG Starting method. Generating context for username: {self.username}")
+
         recent_messages = []
 
         try:
-            logging.debug(f"generate_context DEBUG About to retrieve recent messages for username: {username}")
+            logging.debug(f"generate_context DEBUG About to retrieve recent messages for username: {self.username}")
 
-            # Fetch recent messages from the database using the username
-            recent_messages = self.db.get_last_n_messages(10, username)
-            # Check if any recent messages were retrieved
+            recent_messages = self.db.get_last_n_messages(10, self.username)
+            
             if not recent_messages:
-                logging.warning(f"generate_context DEBUG No recent messages found for username: {username}")
+                logging.warning(f"generate_context DEBUG No recent messages found for username: {self.username}")
             else:
-                logging.debug(f"generate_context DEBUG {len(recent_messages)} recent messages retrieved for username: {username}")
+                logging.debug(f"generate_context DEBUG {len(recent_messages)} recent messages retrieved for username: {self.username}")
 
         except Exception as e:
-            # Log the error if there's a problem fetching recent messages
-            logging.error(f"generate_context DEBUG Error occurred while retrieving recent messages for username {username}: {e}")
+            logging.error(f"generate_context DEBUG Error occurred while retrieving recent messages for username {self.username}: {e}")
 
-        # Construct the context from the recent messages
         context = ' '.join(recent_messages)
+        context += f" {self.custom_context}"
+        context += f" The user's name is {self.full_name}."
+        context = context.strip()  # remove leading and trailing spaces
 
-        # Add the custom context if it exists
-        if self.custom_context:
-            context += f" {self.custom_context}"
-
-        # Add the user's decrypted full name to the context for personalization
-        context += f" The user's name is {decrypted_full_name}."
-
-        # Additional debug logs for troubleshooting
         logging.debug(f"generate_context DEBUG Constructed context from recent messages: {context}")
         logging.debug(f"generate_context DEBUG Custom context: {self.custom_context}")
-        logging.debug(f"generate_context DEBUG Decrypted full name: {decrypted_full_name}")
-
-        logging.debug(f"generate_context DEBUG Final context for Full Name {username}: {context}")
+        logging.debug(f"generate_context DEBUG Full name: {self.full_name}")
+        logging.debug(f"generate_context DEBUG Final context for username {self.username}: {context}")
 
         return context
 
-
-
-    # TODO - add date and time to context if keywords for date and time are found in the last message inputted by the user
-    
     def add_custom_context(self, custom_context: str) -> None:
-        """Add custom context."""
-        
-        # Logging the start of the method with the input details.
         logging.debug(f"CLASS ContextManager - add_custom_context: Starting method. Attempting to add custom context: {custom_context}")
         
-        # Try to add the custom context to the existing context.
         try:
-            self.custom_context += f"Your an amazing AI Lifeform, Called Pilot Pro, your job is to help as best you can with simple instructions and complete info. {custom_context}"
-            
-            # Log the success of adding the custom context.
+            self.custom_context += f" {custom_context}"
             logging.debug(f"CLASS ContextManager - add_custom_context: Successfully added custom context: {custom_context}")
             
         except Exception as e:
-            # Log detailed error information if there's an exception while adding custom context.
             logging.error(f"CLASS ContextManager - add_custom_context: Error adding custom context.")
             logging.error("Exception Type: %s", type(e).__name__)
             logging.error("Exception Args: %s", e.args)
-            logging.error("Recommendation: Check the custom_context input and ensure it's a valid string.")
+            logging.debug("Recommendation: Check the custom_context input and ensure it's a valid string.")
         
-        # Log the final state of the custom context.
         logging.debug(f"CLASS ContextManager - add_custom_context: Final state of custom context: {self.custom_context}")
 
+    def remember_username_and_full_name(self, username: str, full_name: str) -> None:
+        try:
+            logging.debug(f"Remembering username: {username} and full name: {full_name}")
 
+            self.username = username
+            self.full_name = full_name
+            
+            logging.debug(f"Successfully stored username and full name.")
+
+        except Exception as e:
+            logging.error(f"Error remembering username and full name.")
+            logging.error("Exception Type: %s", type(e).__name__)
+            logging.error("Exception Args: %s", e.args)
+            logging.debug("Recommendation: Check the input values and ensure they're valid strings.")
 
     def add_name_context(self, name: str) -> None:
-        """Add the user's name to the context."""
         logging.debug(f"CLASS ContextManager - add_name_context: Adding name {name} to context.")
         self.add_custom_context(f"The user's name is {name}.")
         logging.debug(f"CLASS ContextManager - add_name_context: Name context added.")
 
     def add_current_time_context(self) -> None:
-        """Add the current time to the context."""
         current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         logging.debug(f"CLASS ContextManager - add_current_time_context: Adding current time {current_time} to context.")
         self.add_custom_context(f"The current time is {current_time}.")
         logging.debug(f"CLASS ContextManager - add_current_time_context: Current time context added.")
 
+    def check_for_time_keywords(self, message: str) -> bool:
+        time_keywords = ['time', 'date', 'day', 'month', 'year', 'hour', 'minute', 'second']
+        for keyword in time_keywords:
+            if keyword in message:
+                return True
+        return False
+
     def add_last_session_time_context(self, last_session_time: str) -> None:
-        """Add the time of the last session to the context."""
         logging.debug(f"CLASS ContextManager - add_last_session_time_context: Adding last session time {last_session_time} to context.")
         self.add_custom_context(f"The last session was at {last_session_time}.")
         logging.debug(f"CLASS ContextManager - add_last_session_time_context: Last session time context added.")
 
     def add_last_message_context(self, last_message_sent: str, last_message_received: str) -> None:
-        """Add the last message sent and received to the context."""
         logging.debug(f"CLASS ContextManager - add_last_message_context: Adding last messages to context.")
         self.add_custom_context(f"The last message sent was: {last_message_sent}")
         self.add_custom_context(f"The last message received was: {last_message_received}")
         logging.debug(f"CLASS ContextManager - add_last_message_context: Last message context added.")
 
     def add_last_n_messages_context(self, n: int, username: str) -> None:
-        """Add the last n messages to the context."""
-        
-        # Logging the start of the method with input details.
         logging.debug(f"CLASS ContextManager - add_last_n_messages_context: Starting method. Attempting to add the last {n} messages for {username} to context.")
         
         try:
-            # Fetch the last n messages.
             last_n_messages = self.db.get_last_n_messages(n, username)
-            
-            # Log the fetched messages.
             logging.debug(f"CLASS ContextManager - add_last_n_messages_context: Fetched the last {n} messages for {username}: {last_n_messages}")
             
-            # Add the fetched messages to the custom context.
-            self.add_custom_context("\n".join(last_n_messages))
-            
-            # Log the success of adding the last n messages to the context.
+            # Extract the messages from the tuples and decrypt them
+            decrypted_messages = [decrypt(message[0]) for message in last_n_messages]
+            self.add_custom_context("\n".join(decrypted_messages))
             logging.debug(f"CLASS ContextManager - add_last_n_messages_context: Successfully added the last {n} messages for {username} to context.")
             
         except Exception as e:
-            # Log detailed error information if there's an exception while adding the last n messages to the context.
             logging.error(f"CLASS ContextManager - add_last_n_messages_context: Error adding the last {n} messages for {username} to context.")
             logging.error("Exception Type: %s", type(e).__name__)
             logging.error("Exception Args: %s", e.args)
             logging.error("Recommendation: Check the database connection and ensure the structure of the 'chat_sessions' table matches the query.")
         
-        # Log the final state of the custom context.
         logging.debug(f"CLASS ContextManager - add_last_n_messages_context: Final state of custom context: {self.custom_context}")
 
-
     def add_last_session_messages_context(self, username: str) -> None:
-        """Add the last two message pairs from the last session to the context."""
-        # Placeholder for the logic to get the last two message pairs from the last session.
-        # This will depend on how you're storing sessions in your database.
         logging.warning("CLASS ContextManager - add_last_session_messages_context: Method not yet implemented.")
 
+    def update_context(self, username: str, last_message_sent: str, last_message_received: str) -> None:
+        try:
+            logging.debug(f"CLASS ContextManager - update_context: Starting method. Updating context for {username}.")
 
-    # More context manipulation methods can be added here.
-    
-    
+            self.add_last_message_context(last_message_sent, last_message_received)
+
+            if self.check_for_time_keywords(last_message_sent):
+                self.add_current_time_context()
+
+            self.add_last_n_messages_context(10, username)
+
+            logging.debug(f"CLASS ContextManager - update_context: Context updated successfully for {username}.")
+        
+        except Exception as e:
+            logging.error(f"CLASS ContextManager - update_context: Error updating context for {username}.")
+            logging.error("Exception Type: %s", type(e).__name__)
+            logging.error("Exception Args: %s", e.args)
+
 
 class ChatUtility:
-    def __init__(self, user_full_name: str, db: Database):
-        self.user_name = user_full_name
-        self.db = Database()
+    def __init__(self, username: str, user_full_name: str, db: Database):
+        self.username = username
+        self.full_name = user_full_name
+        self.db = db
         self.context_manager = ContextManager()
 
-    def send_primary_PAI(self, text: str, username: str, domain_name: str = "ms", context: Optional[str] = None) -> Dict:
+    def send_primary_PAI(self, text: str, domain_name: str = "ms", context: Optional[str] = None) -> Dict:
         try:
-            logging.debug(f"send_primary_PAI: Starting method with text={text}, username={username}, domain_name={domain_name}, context={context}")
+            logging.debug(f"send_primary_PAI: Starting method with text={text}, domain_name={domain_name}, context={context}")
             
-            with self.db:
-                # Save user's message
-                self.db.save_message(username, text, 'User')
+            # Update the context using the last message sent
+            self.context_manager.update_context(self.username, text, None)  # Assuming no last AI message at this point
+            logging.debug("send_primary_PAI: Context updated")
+            
+            # If context is not provided, generate it
+            if not context:
+                context = self.context_manager.generate_context(self.username, self.full_name)
+            logging.debug(f"send_primary_PAI: Context generated: {context}")
+            
+            # Fetch recent interactions
+            recent_interactions = self.db.get_last_n_messages(10, self.username)
+            logging.debug(f"send_primary_PAI: Recent interactions fetched: {recent_interactions}")
+            
+            # Prepare the payload
+            payload = {
+                "Text": text,
+                "DomainName": domain_name,
+                "Context": context
+            }
+            logging.debug(f"send_primary_PAI: Prepared payload: {payload}")
 
-                # Get the last 10 pairs of chat interactions for context
-                if not context:
-                    context = self.context_manager.generate_context(username, self.user_name)
+            # Send the payload
+            response = requests.post(BASE_URL + "/message", headers=HEADERS, json=payload, timeout=60)
+            response_data = response.json()
+            logging.debug(f"send_primary_PAI: Response received: {response_data}")
+            
+            ai_message = response_data.get('ai_message', None)
+            
+            # Save both user's message and AI's response
+            self.db.save_message(self.username, text, 'User')
+            if ai_message:
+                self.db.save_message(self.username, ai_message, 'AI')
+            
+            ai_score = response_data.get('ai_score', None)
 
-                
-                payload = {
-                    "Text": text,
-                    "DomainName": domain_name,
-                    "Context": context
-                }
-
-                logging.debug(f"send_primary_PAI: Sending payload: {payload}")
-
-                response = requests.post(BASE_URL + "/message", headers=HEADERS, json=payload, timeout=60)
-                
-                response_data = response.json()
-                
-                ai_message = response_data.get('ai_message', None)
-                
-                # Save AI's response
-                if ai_message:
-                    self.db.save_message(username, ai_message, 'AI')
-                
-                ai_score = response_data.get('ai_score', None)
-
-                return {
-                    "response": ai_message,
-                    "score": ai_score,
-                    "source": "Personal AI",
-                    "status_code": response.status_code,
-                    "headers": dict(response.headers)
-                }
+            return {
+                "response": ai_message,
+                "score": ai_score,
+                "source": "Personal AI",
+                "status_code": response.status_code,
+                "headers": dict(response.headers)
+            }
         except Exception as e:
             logging.error(f"send_primary_PAI: An error occurred: {e}")
+            return {"error": str(e)}
 
-    def send_secondary_GPT4(self, prompt: str, username: str, context: Optional[str] = None, recent_interactions: Optional[List[str]] = None) -> str:
+
+
+    def send_secondary_GPT4(self, prompt: str, context: Optional[str] = None, recent_interactions: Optional[List[str]] = None) -> str:
         try:
-            logging.debug(f"send_secondary_GPT4: Starting method with prompt={prompt}, username={username}, context={context}, recent_interactions={recent_interactions}")
+            logging.debug(f"send_secondary_GPT4: Starting method with prompt={prompt}, context={context}, recent_interactions={recent_interactions}")
             
-            with self.db:
-                # Save user's message
-                self.db.save_message(username, prompt, 'User')
+            # Update the context using the last message sent
+            self.context_manager.update_context(self.username, prompt, None)  # Assuming no last AI message at this point
+            
+            # If context is not provided, generate it
+            if not context:
+                context = self.context_manager.generate_context(self.username, self.full_name)
+            
+            # Fetch recent interactions
+            recent_interactions = self.db.get_last_n_messages(10, self.username)
+            
+            messages = [{"role": "system", "content": context}]
+            messages.extend([{"role": "system", "content": interaction[0]} for interaction in recent_interactions])
 
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {OPENAI_API_KEY}"
-                }
+            
+            # Prepare the payload
+            payload = {
+                "model": "gpt-4",
+                "messages": messages
+            }
 
-                messages = [{"role": "system", "content": "You are a helpful assistant."},
-                            {"role": "user", "content": f"{prompt}"}]
+            logging.debug(f"send_secondary_GPT4: Sending payload: {payload}")
 
-                if not context:
-                    context = self.context_manager.generate_context(username)
-                
-                logging.debug("send_secondary_GPT4: Context generated")
+            response = requests.post(OPENAI_ENDPOINT, headers=OPENAI_HEADERS, json=payload, timeout=30)
+            
+            logging.debug(f"send_secondary_GPT4: Response received: {response.text}")
 
-                if not recent_interactions:
-                    recent_interactions = self.db.get_last_n_messages(10, username)
-                
-                logging.debug("send_secondary_GPT4: Recent interactions fetched")
+            response_data = response.json()
+            ai_content = response_data.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
 
-                messages.append({"role": "system", "content": context})
-                messages.extend([{"role": "system", "content": interaction} for interaction in recent_interactions])
+            # Save both user's message and AI's response
+            self.db.save_message(self.username, prompt, 'User')
+            if ai_content:
+                self.db.save_message(self.username, ai_content, 'AI')
 
-                payload = {
-                    "model": "gpt-4",
-                    "messages": messages
-                }
-
-                logging.debug(f"send_secondary_GPT4: Sending payload: {payload}")
-
-                response = requests.post(OPENAI_ENDPOINT, headers=headers, json=payload, timeout=30)
-                
-                logging.debug(f"send_secondary_GPT4: Response received: {response.text}")
-
-                response_data = response.json()
-                ai_content = response_data.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
-
-                # Save AI's response
-                if ai_content:
-                    self.db.save_message(username, ai_content, 'AI')
-
-                return ai_content
+            return ai_content
         except Exception as e:
             logging.error(f"send_secondary_GPT4: An error occurred: {e}")
-
+            return "An error occurred while processing the request."
 
 class ChatSession:
-    def __init__(self, username: str, decrypted_full_name: str):
+    def __init__(self, username: str, full_name: str):
         logging.debug("CLASS ChatSession - __init__: Initialization started.")
         logging.debug(f"CLASS ChatSession - __init__: Received username: {username}")
-        logging.debug(f"CLASS ChatSession - __init__: Received decrypted full name: {decrypted_full_name}")
+        logging.debug(f"CLASS ChatSession - __init__: Received full name: {full_name}")
 
         self.username = username
-        self.user_name = decrypted_full_name  # This is used for display in the chat
+        self.full_name = full_name  # This is used for display in the chat
         logging.debug("CLASS ChatSession - __init__: Assigned instance variables.")
 
         self.db = ChatDatabase()
         logging.debug("CLASS ChatSession - __init__: ChatDatabase instance created.")
 
         # Assuming ChatUtility needs the username for database operations or similar tasks
-        self.chat_utility = ChatUtility(self.username, self.db)
+        self.chat_utility = ChatUtility(self.username, self.full_name, self.db)
         logging.debug("CLASS ChatSession - __init__: ChatUtility instance created with the provided username.")
 
         self.commands = {
@@ -357,14 +360,13 @@ class ChatSession:
         # Fetch the last 25 messages from the chat database
         try:
             db = Database()
-            recent_messages = db.get_last_n_messages(25, self.user_name)  # use self.user_name
+            recent_messages = db.get_last_n_messages(25, self.full_name)  # use self.full_name
             print("=== Last 25 Chat Messages ===")
             for message in recent_messages:
                 print(message)
             print("="*30)
         except Exception as e:
             print(f"Error fetching messages from the database: {e}")
-
 
     def _exit_session(self):
         print("Thank you for chatting! Goodbye!")
@@ -375,18 +377,15 @@ class ChatSession:
         if func:
             return func(self)
 
-
-
-
     def _get_response(self, user_message: str):
         try:
             # Pass the correct arguments to send_primary_PAI
-            response_data = self.chat_utility.send_primary_PAI(user_message, self.user_name)
+            response_data = self.chat_utility.send_primary_PAI(user_message, self.full_name)
 
             # If there's an issue with the primary AI or the response is empty, fallback to secondary AI
             if not response_data["response"]:
                 logging.info("\nSwitching to secondary AI due to empty response from primary AI.")
-                return self.chat_utility.send_secondary_GPT4(user_message, self.user_name)
+                return self.chat_utility.send_secondary_GPT4(user_message, self.full_name)
 
             return response_data["response"]
         except requests.exceptions.Timeout as e:
@@ -400,11 +399,11 @@ class ChatSession:
             return "Sorry, an unexpected error occurred while processing your request."
 
     def start(self):
-        self.chat_utility.context_manager.add_name_context(self.user_name)
+        self.chat_utility.context_manager.add_name_context(self.full_name)
         print("\nWelcome to the Pilot Pro Chat (PROOF OF CONCEPT), Hosted by Ziggy the Personal.ai of Matthew Schafer! \nType 'help' for available commands or 'exit' to exit the chat to the Main Settings Menu.")
         while True:
             try:
-                user_message = input(f"\n{self.user_name}: ")  # This line has been changed
+                user_message = input(f"\n{self.full_name}: ")  # This line has been changed
 
                 if user_message in self.commands:
                     command_result = self._process_command(user_message)
@@ -417,7 +416,7 @@ class ChatSession:
             except Exception as e:
                 logging.error(f"Unexpected error: {e}")
                 print("Sorry, an unexpected error occurred. Please try again.")
-                
+
 # -----------------------------------------------------------------------------
 # End of `chat_utils.py` module.
 #

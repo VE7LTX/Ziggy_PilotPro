@@ -44,7 +44,6 @@ import sqlite3
 from typing import List, Tuple
 import logging
 
-
 def encrypt(message: str) -> str:
     """
     Encrypts the given message by adding 3 to the ordinal value of each character.
@@ -63,12 +62,7 @@ def encrypt(message: str) -> str:
     encrypted_message = ""
     try:
         for c in message:
-            # Logging each character's ordinal value before and after encryption
-            logging.debug(f"Function encrypt - CharProcess: Processing character '{c}' with ordinal value {ord(c)}.")
-
             encrypted_char = chr(ord(c) + 3)
-            logging.debug(f"Function encrypt - CharEncrypt: Character '{c}' encrypted to '{encrypted_char}' with ordinal value {ord(encrypted_char)}.")
-
             encrypted_message += encrypted_char
 
         logging.debug(f"Function encrypt - Success: Message successfully encrypted. Starting characters of encrypted message: {encrypted_message[:10]}...")
@@ -102,7 +96,6 @@ def decrypt(encrypted_message: str) -> str:
         for c in encrypted_message:
             decrypted_char = chr(ord(c) - 3)
             decrypted_chars.append(decrypted_char)
-            logging.debug(f"Function decrypt - Process: Character '{c}' decrypted to '{decrypted_char}'.")
 
         decrypted_message = ''.join(decrypted_chars)
         logging.debug(f"Function decrypt - Success: Message successfully decrypted. Encrypted: {encrypted_message}, Decrypted: {decrypted_message}")
@@ -112,193 +105,103 @@ def decrypt(encrypted_message: str) -> str:
         logging.exception(f"Function decrypt - Error: An error occurred during decryption for encrypted message: {encrypted_message}. Error: {e}")
         raise
 
+
+class ChatDatabaseError(Exception):
+    """Base exception class for ChatDatabase related errors."""
+    pass
     
     
 class ChatDatabase:
     def __init__(self, db_name: str = "chat.db"):
         logging.debug(f"CLASS ChatDatabase - __init__: Method entry. Initializing ChatDatabase.")
         
-        self.db_folder = "DB"  # Default folder name
+        self.db_folder = "DB"
         logging.debug(f"CLASS ChatDatabase - __init__: Setting default database folder to: {self.db_folder}")
 
-        logging.debug(f"CLASS ChatDatabase - __init__: Checking existence of database directory: {self.db_folder}")
         # Ensure the DB folder exists or create it
         if not os.path.exists(self.db_folder):
-            logging.debug(f"CLASS ChatDatabase - __init__: Database directory {self.db_folder} does not exist. Attempting to create it.")
-            
             os.makedirs(self.db_folder)
             logging.debug(f"CLASS ChatDatabase - __init__: Successfully created database directory: {self.db_folder}")
-        else:
-            logging.debug(f"CLASS ChatDatabase - __init__: Database directory {self.db_folder} already exists. No need to create.")
-        
+
         self.db_name = os.path.join(self.db_folder, db_name)
-        logging.debug(f"CLASS ChatDatabase - __init__: Constructed database path: {self.db_name}")
-
         self.conn = None
-        logging.debug(f"CLASS ChatDatabase - __init__: Initialized database connection variable to None.")
-        
-        logging.debug(f"CLASS ChatDatabase - __init__: ChatDatabase initialized successfully with database path: {self.db_name}")
-        logging.debug(f"CLASS ChatDatabase - __init__: Method exit.")
-
 
     def __enter__(self):
-        logging.debug(f"CLASS ChatDatabase - __enter__: Preparing to enter context management for database: {self.db_name}.")
-        
-        self.open_connection()
-
-        if self.conn:
-            logging.debug(f"CLASS ChatDatabase - __enter__: Successfully opened a connection to database: {self.db_name}.")
-        else:
-            logging.error(f"CLASS ChatDatabase - __enter__: Failed to open a connection to database: {self.db_name}.")
-
-        logging.info(f"CLASS ChatDatabase - __enter__: Entered context management for database: {self.db_name}.")
+        try:
+            self.open_connection()
+        except ChatDatabaseError as e:
+            logging.error(f"CLASS ChatDatabase - __enter__: {e}")
+            # Handle the error as you see fit, e.g., by raising another exception or exiting the program.
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        logging.debug(f"CLASS ChatDatabase - __exit__: Preparing to exit context management for database: {self.db_name}.")
-
-        if exc_type or exc_value or traceback:
-            logging.error(f"CLASS ChatDatabase - __exit__: Exception detected during context management. Type: {exc_type}, Value: {exc_value}.")
-            logging.debug(f"CLASS ChatDatabase - __exit__: Traceback: {traceback}")
-
         self.close_connection()
 
-        if not self.conn:
-            logging.debug(f"CLASS ChatDatabase - __exit__: Successfully closed connection to database: {self.db_name}.")
-        else:
-            logging.error(f"CLASS ChatDatabase - __exit__: Failed to close connection to database: {self.db_name}.")
-
-        logging.info(f"CLASS ChatDatabase - __exit__: Exited context management for database: {self.db_name}.")
-
-    def save_message(self, username: str, message: str, role: str):
+    def is_connection_valid(self) -> bool:
         """
-        Save a message to the database.
+        Checks if the current database connection is valid.
 
-        :param username: The username of the user.
-        :param message: The message to save.
-        :param role: The role of the sender (User or AI).
+        Returns:
+        - True if the connection is valid, False otherwise.
         """
+        # If connection is None, it is not valid
+        if self.conn is None:
+            return False
+        
         try:
-            logging.debug(f"save_message: Starting method with username={username}, message={message}, role={role}")
-
-            if self.conn:
-                logging.debug("save_message: Inside connection context manager")
-
-                insert_query = "INSERT INTO chat_sessions (username, message, role) VALUES (?, ?, ?)"
-                logging.debug(f"save_message: Prepared insert query: {insert_query}")
-
-                insert_values = (username, message, role)
-                logging.debug(f"save_message: Prepared insert values: {insert_values}")
-
-                self.conn.execute(insert_query, insert_values)
-                logging.debug("save_message: Message inserted into database")
-
-            else:
-                logging.error("save_message: No active connection to the database")
-
-        except sqlite3.OperationalError as oe:
-            logging.error(f"save_message: Operational Error occurred: {oe}")
-            logging.debug("save_message: Checking if database file is accessible and not locked by another process.")
-
-        except sqlite3.Error as e:
-            logging.error(f"save_message: sqlite3 Error occurred: {e}")
-            logging.debug("save_message: Verifying database file integrity and structure.")
-
-        except Exception as e:
-            logging.exception(f"save_message: Unexpected Error occurred: {e}")
-            logging.debug("save_message: Checking environmental factors and external dependencies.")
-
-
+            self.conn.execute("SELECT 1")
+            return True
+        except sqlite3.Error:
+            return False
 
     def open_connection(self):
-        logging.debug(f"CLASS ChatDatabase - open_connection: Starting method to handle database connection.")
-
-        # Initial log for the connection attempt
-        logging.debug(f"CLASS ChatDatabase - open_connection: Preparing to open connection to database: {self.db_name}")
-
-        # Check if the database file exists before attempting to connect
+        """
+        Opens a connection to the database and creates tables if they do not exist.
+        """
+        # Check if the database file exists
         if not os.path.exists(self.db_name):
             logging.warning(f"CLASS ChatDatabase - open_connection: Database file {self.db_name} does not exist. Will be created upon connection.")
 
-        # Check if there is an existing connection
-        if not self.conn:
-            try:
-                logging.debug(f"CLASS ChatDatabase - open_connection: Attempting to establish a connection to database: {self.db_name}")
-                self.conn = sqlite3.connect(self.db_name)
-                logging.debug(f"CLASS ChatDatabase - open_connection: Successfully established connection to database: {self.db_name}")
+        # Attempt to connect to the database
+        try:
+            self.conn = sqlite3.connect(self.db_name)
+            self._create_tables()
+        except sqlite3.Error as e:
+            logging.error(f"CLASS ChatDatabase - open_connection: sqlite3 Error occurred: {e}")
+            raise ChatDatabaseError("Failed to connect to the database.")
 
-                # Check and create tables
-                logging.debug(f"CLASS ChatDatabase - open_connection: Checking and creating necessary tables in database: {self.db_name}")
-                self._create_tables()
-                logging.debug(f"CLASS ChatDatabase - open_connection: Tables checked/created successfully in database: {self.db_name}")
-
-            except sqlite3.OperationalError as oe:
-                logging.error(f"CLASS ChatDatabase - open_connection: Operational Error while attempting to connect to {self.db_name}. Error: {oe}")
-                logging.debug(f"CLASS ChatDatabase - open_connection: Checking if database file {self.db_name} is accessible and not locked by another process.")
-
-            except sqlite3.Error as e:
-                logging.error(f"CLASS ChatDatabase - open_connection: sqlite3 Error while attempting to connect to {self.db_name}. Error: {e}")
-                logging.debug(f"CLASS ChatDatabase - open_connection: Verifying database file integrity and structure.")
-
-            except Exception as e:
-                logging.exception(f"CLASS ChatDatabase - open_connection: Unexpected Error while attempting to connect to {self.db_name}. Error: {e}")
-                logging.debug(f"CLASS ChatDatabase - open_connection: Checking environmental factors and external dependencies.")
-            
+        # Check if the connection was created successfully
+        if self.conn is None:
+            logging.error("Failed to create the database connection.")
+            raise ChatDatabaseError("Failed to create the database connection.")
         else:
-            logging.warning(f"CLASS ChatDatabase - open_connection: Connection already active to database: {self.db_name}. Consider closing the current connection before opening a new one.")
-
-        logging.debug(f"CLASS ChatDatabase - open_connection: Ending method after handling database connection.")
-
+            logging.warning(f"CLASS ChatDatabase - open_connection: Connection already active.")
 
     def close_connection(self):
         """
-        Close the database connection.
+        Closes the connection to the database.
         """
-        logging.debug(f"CLASS ChatDatabase - close_connection: Method entry.")
-        logging.info(f"CLASS ChatDatabase - close_connection: Attempting to close connection to database: {self.db_name}")
-        
-        if self.conn:
-            logging.debug(f"CLASS ChatDatabase - close_connection: Active connection found for database: {self.db_name}.")
+        # Check if the connection is valid before attempting to close it
+        if self.is_connection_valid():
             try:
                 self.conn.close()
-                logging.debug(f"CLASS ChatDatabase - close_connection: Connection closed successfully for database: {self.db_name}")
-            except sqlite3.OperationalError as oe:
-                logging.error(f"CLASS ChatDatabase - close_connection: Operational Error while closing: {oe}")
-                logging.debug(f"CLASS ChatDatabase - close_connection: Verifying database integrity after Operational Error.")
             except sqlite3.Error as e:
-                logging.error(f"CLASS ChatDatabase - close_connection: sqlite3 Error while closing: {e}")
-                logging.debug(f"CLASS ChatDatabase - close_connection: Verifying database connections and cursors after sqlite3 Error.")
-            except Exception as e:
-                logging.exception(f"CLASS ChatDatabase - close_connection: Unexpected Error while closing: {e}")
-                logging.debug(f"CLASS ChatDatabase - close_connection: Verifying database state after Unexpected Error.")
+                logging.error(f"CLASS ChatDatabase - close_connection: sqlite3 Error occurred: {e}")
+                raise ChatDatabaseError("Failed to close the database connection.")
             finally:
+                # Ensure the connection is set to None, even if an error occurs
                 self.conn = None
-                logging.debug(f"CLASS ChatDatabase - close_connection: Connection variable reset to None for database: {self.db_name}.")
-                logging.info(f"CLASS ChatDatabase - close_connection: Final state of connection is: {self.conn}")
-        else:
-            logging.warning(f"CLASS ChatDatabase - close_connection: Connection is already closed or was never initialized for database: {self.db_name}")
-            logging.debug(f"CLASS ChatDatabase - close_connection: Skipping connection close procedure.")
 
-        logging.debug(f"CLASS ChatDatabase - close_connection: Method exit.")
 
     def _create_tables(self):
         """
-        Create tables if they don't exist.
+        Creates the necessary tables in the database.
         """
-        # Starting the table creation/checking process
-        logging.debug("CLASS ChatDatabase - _create_tables: Starting the table creation/checking process.")
-
-        # Checking if there's an active connection
-        if not self.conn:
-            logging.error("CLASS ChatDatabase - _create_tables: No active database connection.")
-            return
+        if not self.is_connection_valid():
+            raise ChatDatabaseError("No active database connection.")
 
         try:
-            # Using a context manager for the database connection
-            logging.debug("CLASS ChatDatabase - _create_tables: Preparing to execute SQL for table creation/checking.")
-            
             with self.conn:
-                # SQL statement to create the table if it doesn't exist
                 self.conn.execute("""
                     CREATE TABLE IF NOT EXISTS chat_sessions (
                         id INTEGER PRIMARY KEY,
@@ -310,24 +213,42 @@ class ChatDatabase:
                         response_encrypted BOOLEAN DEFAULT FALSE
                     )
                 """)
-            # Logging the successful execution of the SQL statement
-            logging.debug("CLASS ChatDatabase - _create_tables: SQL execution for table creation/checking was successful.")
-
-        except sqlite3.OperationalError as oe:
-            logging.error(f"CLASS ChatDatabase - _create_tables: Operational Error during table creation/checking. Error: {oe}")
-            logging.debug("CLASS ChatDatabase - _create_tables: Verifying 'chat_sessions' table structure.")
-        except sqlite3.IntegrityError as ie:
-            logging.error(f"CLASS ChatDatabase - _create_tables: Integrity Error during table creation/checking. Error: {ie}")
-            logging.debug("CLASS ChatDatabase - _create_tables: Verifying table constraints.")
         except sqlite3.Error as e:
-            # Logging the error along with the traceback
-            logging.exception(f"CLASS ChatDatabase - _create_tables: General SQLite error during table creation/checking.")
+            logging.error(f"CLASS ChatDatabase - _create_tables: sqlite3 Error occurred: {e}")
+            raise ChatDatabaseError("Failed to create or validate tables.")
+
+    def save_message(self, username: str, message: str, role: str) -> int:
+        """
+        Saves a message into the database.
+
+        Parameters:
+        - username (str): The name of the user.
+        - message (str): The content of the message.
+        - role (str): Role of the user (e.g., 'user', 'assistant').
+
+        Returns:
+        - The row id of the inserted message.
+        """
+        try:
+            if not self.is_connection_valid():
+                self.open_connection()
+                if not self.is_connection_valid():
+                    logging.error("save_message: No active connection to the database")
+                    raise ChatDatabaseError("No active connection to the database.")
+
+            insert_query = "INSERT INTO chat_sessions (username, message, role) VALUES (?, ?, ?)"
+            cursor = self.conn.cursor()
+            cursor.execute(insert_query, (username, message, role))
+            self.conn.commit()
+            return cursor.lastrowid
+
+        except sqlite3.Error as e:
+            logging.error(f"save_message: sqlite3 Error occurred: {e}")
+            raise ChatDatabaseError(f"Error saving message. SQLite Error: {e}")
+
         except Exception as e:
-            logging.exception(f"CLASS ChatDatabase - _create_tables: An unexpected error occurred during table creation/checking. Error: {e}")
-
-        # Indicating the end of the process
-        logging.debug("CLASS ChatDatabase - _create_tables: Table creation/checking process complete.")
-
+            logging.exception(f"save_message: Unexpected Error occurred: {e}")
+            raise ChatDatabaseError(f"Unexpected error occurred: {e}")
 
     def insert_message(self, username: str, message: str, role: str, response: str, encrypt_message: bool = True) -> None:
         """
@@ -346,7 +267,7 @@ class ChatDatabase:
         logging.debug(f"CLASS ChatDatabase - insert_message: Entry. Initiating message insertion for user: {username}.")
         
         # Checking for database connection status
-        if not self.conn:
+        if not self.is_connection_valid():
             logging.error(f"CLASS ChatDatabase - insert_message: No active connection to database: {self.db_name}. Ensure the connection is established before inserting messages.")
             return
 
@@ -372,19 +293,12 @@ class ChatDatabase:
                 )
                 logging.debug(f"CLASS ChatDatabase - insert_message: Message and response inserted successfully into the database for user: {username}.")
 
-        except sqlite3.IntegrityError as ie:
-            logging.error(f"CLASS ChatDatabase - insert_message: Integrity Error for user: {username}. Possibly a primary key conflict. Error: {ie}.")
-        except sqlite3.OperationalError as oe:
-            logging.error(f"CLASS ChatDatabase - insert_message: Operational Error for user: {username}. Error: {oe}.")
-            logging.debug(f"CLASS ChatDatabase - insert_message: Verifying 'chat_sessions' table structure in database: {self.db_name}.")
         except sqlite3.Error as e:
-            logging.exception(f"CLASS ChatDatabase - insert_message: General sqlite3 error occurred for user: {username}. Error: {e}.")
+            logging.exception(f"CLASS ChatDatabase - insert_message: sqlite3 error occurred for user: {username}. Error: {e}.")
         except Exception as e:
             logging.exception(f"CLASS ChatDatabase - insert_message: Unexpected error for user: {username}. Error: {e}.")
 
         logging.debug(f"CLASS ChatDatabase - insert_message: Exit. Completed message insertion process for user: {username}.")
-
-
 
     def get_messages(self, username: str) -> List[Tuple[str, str, str, str]]:
         """
@@ -399,7 +313,7 @@ class ChatDatabase:
         """
         logging.debug(f"CLASS ChatDatabase - get_messages: Starting method for user: {username}.")
         
-        if not self.conn:
+        if not self.is_connection_valid():
             logging.error("CLASS ChatDatabase - get_messages: Connection is not open!")
             logging.warning(f"CLASS ChatDatabase - get_messages: No messages will be returned for user: {username} due to inactive database connection.")
             return []
@@ -437,23 +351,29 @@ class ChatDatabase:
         finally:
             logging.debug(f"CLASS ChatDatabase - get_messages: Exiting method for user: {username}.")
 
-    def get_last_n_messages(self, n: int, user_name: str, username: str) -> list:
+    def get_last_n_messages(self, n: int, user_name: str) -> list:
         """
         Retrieve the last n messages for a given username along with the AI's response.
         Enhanced with more detailed debugging logs.
-        """
 
+        Parameters:
+        - n (int): The number of messages to retrieve.
+        - user_name (str): The name of the user.
+
+        Returns:
+        - A list of tuples containing the decrypted messages, role, and responses.
+        """
         method_name = "get_last_n_messages"
         logging.debug(f"CLASS ChatDatabase - {method_name}: Method start.")
         logging.debug(f"CLASS ChatDatabase - {method_name}: Input parameters - username: {user_name}, n: {n}.")
         
         # Check connection status
-        if not self.conn:
+        if not self.is_connection_valid():
             logging.error(f"CLASS ChatDatabase - {method_name}: No active connection to the database.")
             logging.debug(f"CLASS ChatDatabase - {method_name}: Attempting to reestablish connection...")
-            self.open_connection()  # Assuming open_connection is a method that initializes the connection.
+            self.open_connection()
             
-            if not self.conn:
+            if not self.is_connection_valid():
                 logging.error(f"CLASS ChatDatabase - {method_name}: Failed to reestablish connection. Exiting method.")
                 return []
             else:
@@ -502,13 +422,14 @@ class ChatDatabase:
             # If there are any other resources to close or finalize, they should be done here.
             logging.info(f"CLASS ChatDatabase - {method_name}: Method execution complete for user: {user_name}.")
 
-
-
     def close(self):
+        """
+        Closes the connection to the database.
+        """
         logging.debug(f"CLASS ChatDatabase - close: Method entry for 'close'.")
         logging.debug(f"CLASS ChatDatabase - close: Initiating the closing procedure for database: {self.db_name}.")
         
-        if self.conn:
+        if self.is_connection_valid():
             logging.debug(f"CLASS ChatDatabase - close: Database connection status for {self.db_name}: Active.")
             logging.debug(f"CLASS ChatDatabase - close: Proceeding to close the connection to database: {self.db_name}.")
             
@@ -517,7 +438,7 @@ class ChatDatabase:
                 logging.debug(f"CLASS ChatDatabase - close: Successfully executed 'close_connection' for database: {self.db_name}.")
                 logging.debug(f"CLASS ChatDatabase - close: Close connection procedure completed for database: {self.db_name}.")
             
-            except Exception as e:
+            except ChatDatabaseError as e:
                 logging.error(f"CLASS ChatDatabase - close: An error occurred while executing 'close_connection' for database: {self.db_name}. Error: {e}")
                 logging.debug(f"CLASS ChatDatabase - close: Error details for database: {self.db_name}. Exception Type: {type(e).__name__}. Args: {e.args}.")
             
@@ -526,6 +447,7 @@ class ChatDatabase:
             logging.debug(f"CLASS ChatDatabase - close: Skipping 'close_connection' procedure for database: {self.db_name}.")
         
         logging.debug(f"CLASS ChatDatabase - close: Method exit for 'close'.")
+
 
 
 
