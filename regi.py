@@ -72,7 +72,7 @@ import logging
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv, set_key
 from typing import Optional, Union
-from chat_utils import ChatSession
+from chat_utils import ChatSession, ContextManager
 from chat_db import ChatDatabase
 
 # Constants
@@ -619,7 +619,8 @@ class App:
             self.current_session = self.session_manager.create_session(username, self.current_user_role)
 
             # Log the successful login event to the chat database
-            with ChatDatabase() as db:
+            with ChatDatabase(ContextManager) as db:
+
                 db.insert_message(username, "User logged in", "system", "Logged in successfully")
 
             logging.debug(f"Current Session ID = {self.current_session}")

@@ -54,23 +54,15 @@ def encrypt(message: str) -> str:
     Returns:
     - str: The encrypted message.
     """
-    logging.debug("Function encrypt - Start: Beginning encryption process.")
-    
-    # Logging input message length and first few characters for context without revealing entire content
-    logging.debug(f"Function encrypt - Input: Processing message of length {len(message)}. Starting characters: {message[:10]}...")
-
     encrypted_message = ""
     try:
         for c in message:
             encrypted_char = chr(ord(c) + 3)
             encrypted_message += encrypted_char
-
-        logging.debug(f"Function encrypt - Success: Message successfully encrypted. Starting characters of encrypted message: {encrypted_message[:10]}...")
         return encrypted_message
     except Exception as e:
-        logging.error(f"Function encrypt - Error: Failed to encrypt character '{c}' from message: {message[:10]}... Error: {e}")
-        logging.exception(f"Function encrypt - Exception: Complete traceback for the error during encryption.")
-        raise
+        error_msg = f"Failed to encrypt character '{c}' from message: {message[:10]}... Error: {e}"
+        raise ValueError(error_msg)
 
 def decrypt(encrypted_message: str) -> str:
     """
@@ -82,39 +74,44 @@ def decrypt(encrypted_message: str) -> str:
     Returns:
     - str: The decrypted message.
     """
-    logging.debug("Function decrypt - Start: Preparing to decrypt the encrypted message.")
-    
     # Validating the input
     if not encrypted_message or not isinstance(encrypted_message, str):
-        logging.warning(f"Function decrypt - Warning: Invalid encrypted message provided: {encrypted_message}. Expected a non-empty string.")
-        return ""
+        raise ValueError(f"Invalid encrypted message provided: {encrypted_message}. Expected a non-empty string.")
     
     try:
-        logging.debug(f"Function decrypt - Process: Starting decryption for encrypted message: {encrypted_message}.")
-        decrypted_chars = []  # List to hold decrypted characters for better debugging
-        
+        decrypted_chars = []  # List to hold decrypted characters
         for c in encrypted_message:
             decrypted_char = chr(ord(c) - 3)
             decrypted_chars.append(decrypted_char)
 
-        decrypted_message = ''.join(decrypted_chars)
-        logging.debug(f"Function decrypt - Success: Message successfully decrypted. Encrypted: {encrypted_message}, Decrypted: {decrypted_message}")
-        return decrypted_message
-
+        return ''.join(decrypted_chars)
     except Exception as e:
-        logging.exception(f"Function decrypt - Error: An error occurred during decryption for encrypted message: {encrypted_message}. Error: {e}")
-        raise
+        error_msg = f"An error occurred during decryption for encrypted message: {encrypted_message}. Error: {e}"
+        raise ValueError(error_msg)
 
-
+# Custom Exception
 class ChatDatabaseError(Exception):
-    """Base exception class for ChatDatabase related errors."""
     pass
-    
-    
+
+def ensure_connection(func):
+    """
+    Decorator to ensure that there's a connection before any database operation.
+    """
+    def wrapper(*args, **kwargs):
+        instance = args[0]
+        if not instance.is_connection_valid():
+            instance.open_connection()
+            if not instance.is_connection_valid():
+                logging.error(f"No active connection for method {func.__name__}")
+                raise ChatDatabaseError("No active connection to the database.")
+        return func(*args, **kwargs)
+    return wrapper
+
 class ChatDatabase:
-    def __init__(self, db_name: str = "chat.db"):
+    def __init__(self, context_manager: 'ContextManager', db_name: str = "chat.db"):
         logging.debug(f"CLASS ChatDatabase - __init__: Method entry. Initializing ChatDatabase.")
         
+        self.context_manager = context_manager
         self.db_folder = "DB"
         logging.debug(f"CLASS ChatDatabase - __init__: Setting default database folder to: {self.db_folder}")
 
@@ -217,6 +214,7 @@ class ChatDatabase:
             logging.error(f"CLASS ChatDatabase - _create_tables: sqlite3 Error occurred: {e}")
             raise ChatDatabaseError("Failed to create or validate tables.")
 
+    @ensure_connection
     def save_message(self, username: str, message: str, role: str) -> int:
         """
         Saves a message into the database.
@@ -229,27 +227,20 @@ class ChatDatabase:
         Returns:
         - The row id of the inserted message.
         """
+        insert_query = "INSERT INTO chat_sessions (username, message, role) VALUES (?, ?, ?)"
         try:
-            if not self.is_connection_valid():
-                self.open_connection()
-                if not self.is_connection_valid():
-                    logging.error("save_message: No active connection to the database")
-                    raise ChatDatabaseError("No active connection to the database.")
-
-            insert_query = "INSERT INTO chat_sessions (username, message, role) VALUES (?, ?, ?)"
             cursor = self.conn.cursor()
             cursor.execute(insert_query, (username, message, role))
             self.conn.commit()
             return cursor.lastrowid
-
         except sqlite3.Error as e:
             logging.error(f"save_message: sqlite3 Error occurred: {e}")
             raise ChatDatabaseError(f"Error saving message. SQLite Error: {e}")
-
         except Exception as e:
             logging.exception(f"save_message: Unexpected Error occurred: {e}")
             raise ChatDatabaseError(f"Unexpected error occurred: {e}")
 
+    @ensure_connection
     def insert_message(self, username: str, message: str, role: str, response: str, encrypt_message: bool = True) -> None:
         """
         Inserts a new message and the corresponding AI response into the chat_sessions table in the database.
@@ -265,26 +256,17 @@ class ChatDatabase:
         - None
         """
         logging.debug(f"CLASS ChatDatabase - insert_message: Entry. Initiating message insertion for user: {username}.")
-        
-        # Checking for database connection status
-        if not self.is_connection_valid():
-            logging.error(f"CLASS ChatDatabase - insert_message: No active connection to database: {self.db_name}. Ensure the connection is established before inserting messages.")
-            return
-
+        encrypted = False
+        encrypted_response = False
+        if encrypt_message:
+            logging.debug(f"CLASS ChatDatabase - insert_message: Encrypting message for user: {username}.")
+            message = encrypt(message)
+            response = encrypt(response)
+            encrypted = True
+            encrypted_response = True
+            logging.debug(f"CLASS ChatDatabase - insert_message: Message and response encrypted successfully for user: {username}.")
         try:
-            encrypted = False
-            encrypted_response = False
-
-            if encrypt_message:
-                logging.debug(f"CLASS ChatDatabase - insert_message: Encrypting message for user: {username}.")
-                message = encrypt(message)
-                response = encrypt(response)
-                encrypted = True
-                encrypted_response = True
-                logging.debug(f"CLASS ChatDatabase - insert_message: Message and response encrypted successfully for user: {username}.")
-
             logging.debug(f"CLASS ChatDatabase - insert_message: Preparing SQL query for insertion into the 'chat_sessions' table.")
-            
             with self.conn:
                 logging.debug(f"CLASS ChatDatabase - insert_message: Beginning transaction for inserting message.")
                 self.conn.execute(
@@ -292,13 +274,12 @@ class ChatDatabase:
                     (username, message, role, encrypted, response, encrypted_response)
                 )
                 logging.debug(f"CLASS ChatDatabase - insert_message: Message and response inserted successfully into the database for user: {username}.")
-
         except sqlite3.Error as e:
             logging.exception(f"CLASS ChatDatabase - insert_message: sqlite3 error occurred for user: {username}. Error: {e}.")
         except Exception as e:
             logging.exception(f"CLASS ChatDatabase - insert_message: Unexpected error for user: {username}. Error: {e}.")
-
         logging.debug(f"CLASS ChatDatabase - insert_message: Exit. Completed message insertion process for user: {username}.")
+
 
     def get_messages(self, username: str) -> List[Tuple[str, str, str, str]]:
         """
