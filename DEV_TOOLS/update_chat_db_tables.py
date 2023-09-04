@@ -1,7 +1,7 @@
 import sqlite3
 import os
 import shutil
-
+# ! PLACE IN DB FOLDER TO USE
 def backup_database(original_path: str, backup_dir: str):
     """Backup the database to the specified backup directory."""
     # Ensure the backup directory exists, if not, create it
