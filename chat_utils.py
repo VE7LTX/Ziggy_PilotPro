@@ -91,30 +91,29 @@ class ContextManager:
 
     def add_context(self, context: str) -> None:
         """Append to the custom context."""
-        logging.debug(f"CLASS ContextManager - add_context: Starting method.")
         logging.debug(f"CLASS ContextManager - add_context: Appending to custom context: {context}.")
         self.custom_context.append(context)
 
     def add_name_context(self, full_name: str) -> None:
-        logging.debug(f"CLASS ContextManager - add_name_context: Starting method for {full_name}.")
+        logging.debug(f"CLASS ContextManager - add_name_context: Appending name context for {full_name}.")
         self.add_context(f"The user's name is {full_name}.")
 
     def add_current_time_context(self) -> None:
         current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        logging.debug(f"CLASS ContextManager - add_current_time_context: Starting method. Current time: {current_time}.")
+        logging.debug(f"CLASS ContextManager - add_current_time_context: Appending current time context: {current_time}.")
         self.add_context(f"The current time is {current_time}.")
 
     def add_last_session_time_context(self, last_session_time: str) -> None:
-        logging.debug(f"CLASS ContextManager - add_last_session_time_context: Starting method. Last session time: {last_session_time}.")
+        logging.debug(f"CLASS ContextManager - add_last_session_time_context: Appending last session time context: {last_session_time}.")
         self.add_context(f"The last session was at {last_session_time}.")
 
     def add_last_message_context(self, sent: str, received: str) -> None:
-        logging.debug(f"CLASS ContextManager - add_last_message_context: Starting method. Sent: {sent}, Received: {received}.")
+        logging.debug(f"CLASS ContextManager - add_last_message_context: Appending last sent and received message context. Sent: {sent}, Received: {received}.")
         self.add_context(f"The last message sent was: {sent}.")
         self.add_context(f"The last message received was: {received}.")
 
     def add_last_n_messages_context(self, n: int, username: str) -> None:
-        logging.debug(f"CLASS ContextManager - add_last_n_messages_context: Starting method. Fetching last {n} messages for user with username {username}...")
+        logging.debug(f"CLASS ContextManager - add_last_n_messages_context: Fetching last {n} messages for user with username {username}...")
         try:
             last_n_messages = self.db.get_messages(username)[:n]
             logging.debug(f"CLASS ContextManager - add_last_n_messages_context: Last {n} messages fetched for {username}: {last_n_messages}.")
@@ -123,13 +122,15 @@ class ContextManager:
         except Exception as e:
             logging.error(f"CLASS ContextManager - add_last_n_messages_context: Error adding last {n} messages for user with username {username}: {e}.")
 
-    # The remaining methods stay the same, but you can apply similar changes to them
+
 
 # Ensure logging is configured for debugging
 logging.basicConfig(level=logging.DEBUG)
 
     
 class ChatUtility:
+    # Called by: Instances of `ChatUtility` class initialization.
+
     """
     Utility class to facilitate chat interactions using Personal AI and OpenAI services.
     """
@@ -159,7 +160,7 @@ class ChatUtility:
         """
         method_name = "send_primary_PAI"
         retries = 0
-        
+
         result = {
             "response": None,
             "score": None,
@@ -167,7 +168,7 @@ class ChatUtility:
             "status_code": None,
             "headers": None
         }
-        
+
         # Retry loop to ensure robustness against transient failures
         while retries < MAX_RETRIES:
             try:
@@ -182,7 +183,7 @@ class ChatUtility:
                     "Text": text,
                     "DomainName": domain_name
                 }
-                
+
                 # Check if context is not None, else log and avoid adding to payload
                 if context:
                     payload["Context"] = context
@@ -190,13 +191,21 @@ class ChatUtility:
                     logging.warning(f"CLASS {self.__class__.__name__} - {method_name}: Context value is None. Not including in payload.")
 
                 logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Sending payload to PAI: {json.dumps(payload, indent=4)}")
-                
+
                 # Send the request to Personal.AI
                 response = requests.post(BASE_URL + "/message", headers=HEADERS, json=payload, timeout=60)
-                
+
                 logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Received response from PAI with status code {response.status_code}")
 
-                response_data = response.json()
+                # Validate that the response is in JSON format and is a dictionary
+                try:
+                    response_data = response.json()
+                    if not isinstance(response_data, dict):
+                        raise ValueError("API response is not a dictionary.")
+                except ValueError as ve:
+                    logging.error(f"Invalid API response format: {ve}")
+                    raise
+
                 logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Response data received from PAI: {json.dumps(response_data, indent=4)}")
 
                 ai_message = response_data.get('ai_message', None)
@@ -209,9 +218,9 @@ class ChatUtility:
                     "status_code": response.status_code,
                     "headers": dict(response.headers)
                 }
-                
+
                 logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Constructed result from PAI response: {json.dumps(result, indent=4)}")
-                
+
                 # If a valid response is received, return it
                 if result['response']:
                     return result
@@ -237,7 +246,10 @@ class ChatUtility:
                     break
 
 
+
     def send_secondary_GPT4(self, prompt: str, username: str, full_name: str, context: Optional[str] = None, recent_interactions: Optional[List[str]] = None) -> str:
+        # Called by: Main chat handler or session manager as a fallback when the primary AI fails or provides unsatisfactory results.
+
         """
         Send a message to the secondary GPT-4 service and retrieve the response.
         
@@ -320,10 +332,7 @@ class ChatSession:
         """)
 
     def _fetch_recent_logs(self):
-        """
-        Fetch and display the last 25 log messages from the logging module 
-        and the last 25 messages from the chat database.
-        """
+        """Fetch and display the last 25 log messages from the logging module and the last 25 messages from the chat database."""
         
         # Fetch the last 25 log messages from the logging module
         for handler in logging.root.handlers:
@@ -344,7 +353,6 @@ class ChatSession:
         except Exception as e:
             print(f"Error fetching messages from the database: {e}")
 
-
     def _exit_session(self):
         print("Thank you for chatting! Goodbye!")
         return 'exit'
@@ -354,7 +362,8 @@ class ChatSession:
         if func:
             return func()
         
-    def _get_response(self, user_message: str):
+    def _get_response(self, user_message: str) -> Optional[str]:
+        """Fetch the AI response for a given user message."""
         logging.debug(f"METHOD _get_response: Starting method with user_message: {user_message}")
         
         try:
@@ -394,6 +403,7 @@ class ChatSession:
             logging.debug(f"METHOD _get_response: Exiting method after processing user_message: {user_message}")
 
     def start(self):
+        """Initiate and handle the chat session loop."""
         logging.debug("METHOD start: Initializing the chat session...")
         
         # Adding the name context
@@ -434,6 +444,7 @@ class ChatSession:
                 
             finally:
                 logging.debug("METHOD start: Loop iteration complete. Awaiting next user input or exiting...")
+
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
