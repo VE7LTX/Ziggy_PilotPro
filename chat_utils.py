@@ -190,7 +190,11 @@ class ChatUtility:
             print("OPENAI DEBUG: Recent interactions fetched")
 
             messages.append({"role": "system", "content": context})
-            messages.extend([{"role": "system", "content": interaction} for interaction in recent_interactions])
+
+            if recent_interactions:
+                for content, role in recent_interactions:
+                    messages.append({"role": role, "content": content})
+                    messages.extend([{"role": "system", "content": interaction} for interaction in recent_interactions])
 
             payload = {
                 "model": "gpt-4",
@@ -269,48 +273,87 @@ class ChatSession:
         func = self.commands.get(command)
         if func:
             return func()
-
+        
     def _get_response(self, user_message: str):
+        logging.debug(f"METHOD _get_response: Starting method with user_message: {user_message}")
+        
         try:
+            logging.debug("METHOD _get_response: Attempting to send message to primary Personal AI...")
+            
             # Pass the correct arguments to send_primary_PAI
             response_data = self.chat_utility.send_primary_PAI(user_message, self.username, self.full_name)
 
+            logging.debug(f"METHOD _get_response: Response data received from primary Personal AI: {response_data}")
 
             # If there's an issue with the primary AI or the response is empty, fallback to secondary AI
             if not response_data["response"]:
                 logging.info("\nSwitching to secondary AI due to empty response from primary AI.")
+                logging.debug("METHOD _get_response: Attempting to send message to secondary GPT-4 AI...")
+                
                 return self.chat_utility.send_secondary_GPT4(user_message, self.username, self.full_name)
-
-
+            
+            logging.debug(f"METHOD _get_response: Returning response from primary Personal AI: {response_data['response']}")
             return response_data["response"]
+        
         except requests.exceptions.Timeout as e:
             logging.error(f"Timeout error: {e}")
+            logging.debug("METHOD _get_response: Checking network status and API endpoint availability.")
             return "Sorry, the request timed out. Please try again later."
+        
         except requests.exceptions.RequestException as e:
             logging.error(f"Network error: {e}")
+            logging.debug("METHOD _get_response: Verifying network configurations and API endpoint status.")
             return "Sorry, a network error occurred while processing your request."
+        
         except Exception as e:
             logging.error(f"Unexpected error: {e}")
+            logging.debug(f"METHOD _get_response: Investigating cause of unexpected error. Error Type: {type(e).__name__}. Args: {e.args}.")
             return "Sorry, an unexpected error occurred while processing your request."
+        
+        finally:
+            logging.debug(f"METHOD _get_response: Exiting method after processing user_message: {user_message}")
 
     def start(self):
+        logging.debug("METHOD start: Initializing the chat session...")
+        
+        # Adding the name context
         self.chat_utility.context_manager.add_name_context(self.full_name)
+        
         print("\nWelcome to the Pilot Pro Chat (PROOF OF CONCEPT), Hosted by Ziggy the Personal.ai of Matthew Schafer! \nType 'help' for available commands or 'exit' to exit the chat to the Main Settings Menu.")
+        
         while True:
             try:
+                logging.debug("METHOD start: Awaiting user input...")
                 user_message = input(f"\n{self.full_name}: ")
 
+                logging.debug(f"METHOD start: User provided input: {user_message}")
+                
+                # Check if the input is a command
                 if user_message in self.commands:
+                    logging.debug(f"METHOD start: User input recognized as command: {user_message}")
+                    
                     command_result = self._process_command(user_message)
+                    logging.debug(f"METHOD start: Command processed with result: {command_result}")
+                    
                     if command_result == 'exit':
+                        logging.info("METHOD start: Exiting chat session upon user command.")
                         break
                     continue
 
+                # Get the AI's response to the user's message
+                logging.debug("METHOD start: Fetching AI response...")
                 response = self._get_response(user_message)
+                
+                logging.debug(f"METHOD start: AI provided response: {response}")
                 print(f"\nPilot Pro AI: {response}\n")
+
             except Exception as e:
-                logging.error(f"Unexpected error: {e}")
+                logging.error(f"Unexpected error in METHOD start: {e}")
+                logging.debug(f"METHOD start: Error Type: {type(e).__name__}. Args: {e.args}.")
                 print("Sorry, an unexpected error occurred. Please try again.")
+                
+            finally:
+                logging.debug("METHOD start: Loop iteration complete. Awaiting next user input or exiting...")
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
