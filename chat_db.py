@@ -55,27 +55,14 @@ def encrypt(message: str) -> str:
     Returns:
     - str: The encrypted message.
     """
-    logging.debug("Function encrypt - Start: Beginning encryption process.")
-    
-    # Logging input message length and first few characters for context without revealing entire content
-    logging.debug(f"Function encrypt - Input: Processing message of length {len(message)}. Starting characters: {message[:10]}...")
-
     encrypted_message = ""
     try:
         for c in message:
-            # Logging each character's ordinal value before and after encryption
-            logging.debug(f"Function encrypt - CharProcess: Processing character '{c}' with ordinal value {ord(c)}.")
-
             encrypted_char = chr(ord(c) + 3)
-            logging.debug(f"Function encrypt - CharEncrypt: Character '{c}' encrypted to '{encrypted_char}' with ordinal value {ord(encrypted_char)}.")
-
             encrypted_message += encrypted_char
 
-        logging.debug(f"Function encrypt - Success: Message successfully encrypted. Starting characters of encrypted message: {encrypted_message[:10]}...")
         return encrypted_message
     except Exception as e:
-        logging.error(f"Function encrypt - Error: Failed to encrypt character '{c}' from message: {message[:10]}... Error: {e}")
-        logging.exception(f"Function encrypt - Exception: Complete traceback for the error during encryption.")
         raise
 
 def decrypt(encrypted_message: str) -> str:
@@ -88,28 +75,14 @@ def decrypt(encrypted_message: str) -> str:
     Returns:
     - str: The decrypted message.
     """
-    logging.debug("Function decrypt - Start: Preparing to decrypt the encrypted message.")
-    
-    # Validating the input
     if not encrypted_message or not isinstance(encrypted_message, str):
-        logging.warning(f"Function decrypt - Warning: Invalid encrypted message provided: {encrypted_message}. Expected a non-empty string.")
         return ""
     
     try:
-        logging.debug(f"Function decrypt - Process: Starting decryption for encrypted message: {encrypted_message}.")
-        decrypted_chars = []  # List to hold decrypted characters for better debugging
-        
-        for c in encrypted_message:
-            decrypted_char = chr(ord(c) - 3)
-            decrypted_chars.append(decrypted_char)
-            logging.debug(f"Function decrypt - Process: Character '{c}' decrypted to '{decrypted_char}'.")
-
+        decrypted_chars = [chr(ord(c) - 3) for c in encrypted_message]
         decrypted_message = ''.join(decrypted_chars)
-        logging.debug(f"Function decrypt - Success: Message successfully decrypted. Encrypted: {encrypted_message}, Decrypted: {decrypted_message}")
         return decrypted_message
-
     except Exception as e:
-        logging.exception(f"Function decrypt - Error: An error occurred during decryption for encrypted message: {encrypted_message}. Error: {e}")
         raise
 
     
@@ -397,59 +370,90 @@ class ChatDatabase:
         finally:
             logging.debug(f"CLASS ChatDatabase - get_messages: Exiting method for user: {username}.")
 
-
-                
-    def get_last_n_messages(self, n: int, username: str) -> List[Tuple[str, str, str]]:
+    def get_last_n_messages(self, username: str, n: int) -> List[Tuple[str, str]]:
         """
-        Retrieve the last n messages for a given username along with the AI's response.
-        """
+        Retrieve the last 'n' interactions (messages and responses) for a given username.
         
-        method_name = "get_last_n_messages"
+        Args:
+        - username (str): The name of the user.
+        - n (int): The number of interactions to retrieve.
+
+        Returns:
+        - List of tuples containing: 
+            - User's message (decrypted if it was encrypted)
+            - AI's response (decrypted if it was encrypted)
+        """
+        logging.debug(f"CLASS ChatDatabase - get_last_n_messages: Retrieving last {n} messages for user: {username}.")
+        
+        if not self.conn:
+            logging.error("CLASS ChatDatabase - get_last_n_messages: Connection is not open!")
+            return []
+        
+        try:
+            with self.conn:
+                cursor = self.conn.execute(
+                    "SELECT message, encrypted, response, response_encrypted FROM chat_sessions WHERE username = ? ORDER BY id DESC LIMIT ?",
+                    (username, n)
+                )
+                
+                interactions = cursor.fetchall()
+                decrypted_interactions = [
+                    (
+                        decrypt(message) if encrypted else message, 
+                        decrypt(response) if response_encrypted else response
+                    ) 
+                    for message, encrypted, response, response_encrypted in interactions
+                ]
+                
+                logging.debug(f"CLASS ChatDatabase - get_last_n_messages: Retrieved {len(decrypted_interactions)} interactions for user: {username}.")
+                return decrypted_interactions
+                
+        except sqlite3.Error as e:
+            logging.error(f"CLASS ChatDatabase - get_last_n_messages: Error retrieving messages: {e}")
+            return []
+                        
+    def get_last_interaction(self, username: str) -> Tuple[str, str]:
+        """
+        Retrieve the last interaction (message and response) for a given username.
+        """
+        method_name = "get_last_interaction"
         logging.debug(f"CLASS ChatDatabase - {method_name}: Method start.")
-        logging.debug(f"CLASS ChatDatabase - {method_name}: Input parameters - username: {username}, n: {n}.")
+        logging.debug(f"CLASS ChatDatabase - {method_name}: Input parameter - username: {username}.")
         
         # Check connection status
         if not self.conn:
             logging.error(f"CLASS ChatDatabase - {method_name}: No active connection to the database.")
             logging.debug(f"CLASS ChatDatabase - {method_name}: Attempting to reestablish connection...")
-            self.open_connection()  # Assuming open_connection is a method that initializes the connection.
+            self.open_connection()
             
             if not self.conn:
                 logging.error(f"CLASS ChatDatabase - {method_name}: Failed to reestablish connection. Exiting method.")
-                return []
+                return ("", "")
         
         try:
-            sql_query = "SELECT message, role, encrypted, response, response_encrypted FROM chat_sessions WHERE username = ? ORDER BY id DESC LIMIT ?"
+            sql_query = "SELECT message, encrypted, response, response_encrypted FROM chat_sessions WHERE username = ? ORDER BY id DESC LIMIT 1"
             logging.debug(f"CLASS ChatDatabase - {method_name}: Prepared SQL query: {sql_query}.")
             
             with self.conn:
                 logging.debug(f"CLASS ChatDatabase - {method_name}: About to execute query with parameters.")
-                cursor = self.conn.execute(sql_query, (username, n))
-                messages = cursor.fetchall()
+                cursor = self.conn.execute(sql_query, (username,))
+                interaction = cursor.fetchone()
                 
-                if not messages:
-                    logging.warning(f"CLASS ChatDatabase - {method_name}: No messages found for user: {username}.")
-                else:
-                    logging.debug(f"CLASS ChatDatabase - {method_name}: Fetched {len(messages)} messages.")
+                if not interaction:
+                    logging.warning(f"CLASS ChatDatabase - {method_name}: No interaction found for user: {username}.")
+                    return ("", "")
                 
-                decrypted_messages = [
-                    (decrypt(message) if encrypted else message, role, decrypt(response) if response_encrypted else response) 
-                    for message, role, encrypted, response, response_encrypted in messages
-                ]
-                logging.debug(f"CLASS ChatDatabase - {method_name}: Decrypted messages: {decrypted_messages}.")
+                message, encrypted, response, response_encrypted = interaction
+                decrypted_message = decrypt(message) if encrypted else message
+                decrypted_response = decrypt(response) if response_encrypted else response
                 
-                return decrypted_messages
+                logging.debug(f"CLASS ChatDatabase - {method_name}: Decrypted interaction: ({decrypted_message}, {decrypted_response}).")
+                
+                return (decrypted_message, decrypted_response)
             
         except sqlite3.Error as e:
             logging.error(f"CLASS ChatDatabase - {method_name}: SQL error occurred - Type: {type(e).__name__}, Args: {e.args}.")
-            return []
-        
-        finally:
-            logging.debug(f"CLASS ChatDatabase - {method_name}: Finalizing method operations...")
-            # If there are any other resources to close or finalize, they should be done here.
-            logging.info(f"CLASS ChatDatabase - {method_name}: Method execution complete for user: {username}.")
-
-
+            return ("", "")
 
 
 
@@ -484,44 +488,3 @@ logging.basicConfig(level=logging.DEBUG)
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 # End of Chat Database Management (PilotPro) Module.
-
-# Module Footnotes:
-
-# Database Structure:
-# The primary database this module interacts with is 'chat.db'. The 'chat_sessions' table within this database
-# is structured to contain columns for unique IDs, usernames, messages, roles, and encryption status.
-
-# Security Measures:
-# The module employs basic encryption for chat messages. For enhanced security, consider integrating with more
-# advanced encryption libraries or methods.
-
-# Performance Considerations:
-# This module has been optimized for small to medium-sized chat applications. For large-scale applications or
-# significant concurrent user loads, consider employing a more scalable database system and optimizing database operations.
-
-# Dependencies:
-# Ensure that all required packages mentioned in the header are installed and compatible with the Python version used.
-
-# Future Enhancements:
-# 1. Integration with more advanced encryption libraries for enhanced security.
-# 2. Adding database indexing to improve retrieval speeds.
-# 3. Implementing a backup mechanism for the database.
-
-# Test Cases:
-# Ensure to have a suite of test cases to validate the module's functionalities. Test for scenarios including:
-# - Normal operation (e.g., message insertion, retrieval)
-# - Edge cases (e.g., empty messages, very long messages)
-# - Error scenarios (e.g., database disconnects, encryption errors)
-
-# Feedback and Contributions:
-# Feedback is always welcome. For contributions, bug reports, or feature requests, please reach out to the author.
-# Ensure to follow the coding standards and guidelines mentioned in the header when contributing.
-
-# Disclaimer:
-# This module is provided as-is. While every effort has been made to ensure reliability and security, the author and
-# VE7LTX Diagonal Thinking LTD take no responsibility for any issues or damages that may arise from its use.
-
-# Last Updated: August 31, 2023
-
-# -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------

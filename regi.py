@@ -88,7 +88,6 @@ if not os.getenv("ENCRYPTION_KEY"):
 KEY = os.getenv("ENCRYPTION_KEY").encode()
 cipher_suite = Fernet(KEY)
 
-
 class Database:
     """Base class for database operations."""
 
@@ -581,7 +580,8 @@ class App:
 
                 if user_details:
                     decrypted_full_name = self.db.decrypt_data(user_details[0], self.current_session[1])
-                    self.start_chat(decrypted_full_name)
+                    self.start_chat(self.current_session[1], decrypted_full_name)
+
                 else:
                     print("Error: User details not found.")
                     
@@ -745,12 +745,12 @@ class App:
             print("Goodbye!")
         exit(0)
         
-    def start_chat(self, decrypted_full_name: str):
+    def start_chat(self, username: str, decrypted_full_name: str):
         """
         Initiates a chat session for the user.
         """
         if self.current_session:
-            chat_session = ChatSession(decrypted_full_name)
+            chat_session = ChatSession(username, decrypted_full_name)
             print(f"\n{decrypted_full_name} Impeccable Taste! I'm Calling up your Chat Interface Now. Please remember you can type 'help' for a list of commands at any time.")
             chat_session.start()
         else:
