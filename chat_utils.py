@@ -151,15 +151,19 @@ class ChatUtility:
             recent_interactions = [message[0] for message in recent_interactions_tuples]
             logging.debug(f"send_primary_PAI: Recent interactions fetched: {recent_interactions}")
 
-            
             # Prepare the payload
             payload = {
                 "Text": text,
                 "DomainName": domain_name,
                 "Context": context
             }
-
+            
+            logging.debug(f"send_primary_PAI: Sending request with payload: {payload}")
             response = requests.post(BASE_URL + "/message", headers=HEADERS, json=payload, timeout=60)
+            
+            logging.debug(f"send_primary_PAI: Response headers: {response.headers}")
+            logging.debug(f"send_primary_PAI: Response text: {response.text}")
+            
             if response.status_code != 200:
                 raise ValueError(f"API returned {response.status_code}: {response.text}")
 
@@ -318,7 +322,7 @@ class ChatSession:
         except Exception as e:
             logging.error(f"Unexpected error: {e}")
             return "Sorry, an unexpected error occurred while processing your request."
-            
+        
     def start(self):
         self.chat_utility.context_manager.remember_username_and_full_name(username=self.username, full_name=self.full_name)
         print("\nWelcome to the Pilot Pro Chat (PROOF OF CONCEPT), Hosted by Ziggy the Personal.ai of Matthew Schafer! \nType 'help' for available commands or 'exit' to exit the chat to the Main Settings Menu.")
@@ -326,6 +330,7 @@ class ChatSession:
         while True:
             try:
                 user_message = input(f"\n{self.full_name}: ")
+                print(f"DEBUG: User input: {user_message}")  # Debug print
 
                 # Update context with the recent message
                 self.chat_utility.context_manager.update_context(username=self.username, 
@@ -339,6 +344,7 @@ class ChatSession:
                     continue
 
                 response = self._get_response(user_message)
+                print(f"DEBUG: AI response: {response}")  # Debug print
 
                 # Update context with the recent response
                 self.chat_utility.context_manager.update_context(username=self.username, 

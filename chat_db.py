@@ -8,36 +8,63 @@ manage chat sessions, store messages, retrieve messages, and handle encryption o
 Author: Matthew Schafer
 Date: September 2, 2023
 Company: VE7LTX Diagonal Thinking LTD
+## Global Functions:
 
-Requirements:
-- Python 3.x
-- Required packages: sqlite3, os, logging, typing
-- SQLite database named 'chat.db' (default) inside the 'DB' folder.
+- **`encrypt(message: str) -> str`**:
+  - Encrypts a given message by adding 3 to the ordinal value of each character.
+  - Returns the encrypted message.
+  
+- **`decrypt(encrypted_message: str) -> str`**:
+  - Decrypts an encrypted message by subtracting 3 from the ordinal value of each character.
+  - Returns the decrypted message.
+  
+- **Decorator: `ensure_connection(func)`**:
+  - Ensures that a connection to the database exists before any database operation is performed.
+  - If no connection is present, it attempts to reestablish one.
 
-Module Logic Breakdown:
-- Encryption (`encrypt` and `decrypt`) functions to handle chat message security.
-- `ChatDatabase` Class:
-  - Manages the SQLite database connection.
-  - Provides functionalities to open, close, and manage database connections.
-  - Provides methods to insert, retrieve and manage chat messages.
-  - Uses context management to handle the database connection.
-  - Error handling for SQLite operations and general exceptions.
+## Methods in the ChatDatabase Class:
 
-Usage:
-1. Ensure the required packages are installed using 'pip install [package name]'.
-2. Instantiate the ChatDatabase class and use its methods to manage chat sessions.
-3. Close the database connection after usage.
-
-Header Comment Explanation:
-- This module focuses on database operations for the PilotPro chat application.
-- SQLite is used as the database. Messages are encrypted before storage for security.
-- Developers can use the provided functionalities to manage chat sessions, store messages, and retrieve them.
-- Comprehensive logging is implemented for debugging purposes.
-
-Debugging Note:
-- This module has been thoroughly debugged and provides granular error logs when operating in DEBUG mode. This ensures that developers can trace issues back to their source and understand the sequence of operations leading up to any errors.
-
-Note: Developers should be cautious about using simple encryption methods. For production use, consider more secure encryption libraries and practices.
+- **`__init__(self, context_manager: 'ContextManager', db_name: str = "chat.db")`**:
+  - Initializes the ChatDatabase instance.
+  - Sets the database folder and name, and prepares the database connection.
+  
+- **`__enter__(self)`**:
+  - Opens a connection to the database when the class is used in a context manager.
+  
+- **`__exit__(self, exc_type, exc_value, traceback)`**:
+  - Closes the connection to the database when exiting the context manager scope.
+  
+- **`is_connection_valid(self) -> bool`**:
+  - Checks if the current database connection is valid.
+  - Returns True if valid, False otherwise.
+  
+- **`open_connection(self)`**:
+  - Opens a connection to the SQLite database and creates tables if they don't exist.
+  
+- **`close_connection(self)`**:
+  - Closes the current connection to the SQLite database.
+  
+- **Private Method: `_create_tables(self)`**:
+  - Creates the necessary tables in the SQLite database if they don't exist.
+  
+- **`save_message(self, username: str, message: str, role: str) -> int`**:
+  - Saves a message into the SQLite database.
+  - Returns the row ID of the inserted message.
+  
+- **`insert_message(self, username: str, message: str, role: str, response: str, encrypt_message: bool = True) -> None`**:
+  - Inserts a new message and its corresponding AI response into the database.
+  - Optionally encrypts the message and response before insertion.
+  
+- **`get_messages(self, username: str) -> List[Tuple[str, str, str, str]]`**:
+  - Retrieves all messages and responses for a given username.
+  - Returns a list of tuples containing the decrypted messages, user's role, AI's response, and AI's role.
+  
+- **`get_last_n_messages(self, n: int, user_name: str) -> list`**:
+  - Retrieves the last 'n' messages for a given username along with the AI's responses.
+  - Returns a list of tuples with decrypted messages.
+  
+- **`close(self)`**:
+  - Closes the connection to the SQLite database.
 """
 import os
 import sqlite3
