@@ -123,14 +123,15 @@ class ChatUtility:
 
 
     def send_primary_PAI(self, text: str, username: str, full_name: str, domain_name: str = "ms", context: Optional[str] = None) -> Dict:
-        logging.debug("Entering send_primary_PAI method.")
-        logging.debug(f"Parameters: text='{text}', username='{username}', full_name='{full_name}', domain_name='{domain_name}', context='{context}'.")
+        method_name = "send_primary_PAI"
+        logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Entering method.")
+        logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Parameters: text='{text}', username='{username}', full_name='{full_name}', domain_name='{domain_name}', context='{context}'.")
 
         try:
             with self.db:
                 # Get the last 10 pairs of chat interactions for context
                 if not context:
-                    logging.debug("Context not provided. Generating context using context_manager.")
+                    logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Context not provided. Generating context using context_manager.")
                     context = self.context_manager.generate_context(username, full_name)  # Pass both username and full_name
 
                 payload = {
@@ -139,12 +140,12 @@ class ChatUtility:
                     "Context": context
                 }
 
-                logging.debug(f"Payload for request: {payload}")
+                logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Sending payload to PAI: {json.dumps(payload, indent=4)}")
                 response = requests.post(BASE_URL + "/message", headers=HEADERS, json=payload, timeout=60)
-                logging.debug(f"Received response with status code {response.status_code}")
+                logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Received response from PAI with status code {response.status_code}")
 
                 response_data = response.json()
-                logging.debug(f"Response data: {json.dumps(response_data, indent=4)}")
+                logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Response data received from PAI: {json.dumps(response_data, indent=4)}")
 
                 ai_message = response_data.get('ai_message', None)
                 ai_score = response_data.get('ai_score', None)  # Extracting ai_score
@@ -156,18 +157,18 @@ class ChatUtility:
                     "status_code": response.status_code,
                     "headers": dict(response.headers)
                 }
-                logging.debug(f"Constructed result: {result}")
-                logging.debug("Exiting send_primary_PAI method.")
+                logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Constructed result from PAI response: {json.dumps(result, indent=4)}")
                 return result
 
         except requests.RequestException as e:
-            logging.error(f"Request error: {e}")
+            logging.error(f"CLASS {self.__class__.__name__} - {method_name}: Request error occurred with PAI: {e}")
             raise  # Re-raise the exception after logging
         except Exception as e:
-            logging.error(f"Unexpected error in send_primary_PAI: {e}")
+            logging.error(f"CLASS {self.__class__.__name__} - {method_name}: Unexpected error occurred during PAI interaction: {e}")
             raise  # Re-raise the exception after logging
+        finally:
+            logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Exiting method.")
 
- 
 
     def send_secondary_GPT4(self, prompt: str, username: str, full_name: str, context: Optional[str] = None, recent_interactions: Optional[List[str]] = None) -> str:
         with self.db:

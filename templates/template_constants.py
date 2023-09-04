@@ -32,7 +32,7 @@
 # Constants for Personal.AI API
 PAI_API_KEY = "Your Personal.ai API Key Here"
 BASE_URL = "https://api.personal.ai/v1"
-
+DOMAINNAME = "ms"
 FILE_NAME = "chat_data.jsonl" #main file chat log
 BASE_URL = "https://api.personal.ai/v1"
 OPENAI_API_KEY = "sk-Your OPENAI Key Here"  # Replace with your actual OpenAI API key
