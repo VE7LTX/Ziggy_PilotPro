@@ -42,14 +42,28 @@ Company: VE7LTX Diagonal Thinking LTD
 
 import requests
 from typing import Optional, List, Dict
-from constants import *
+from constants import (
+    OPENAI_API_KEY, 
+    OPENAI_ENDPOINT, 
+    OPENAI_HEADERS,
+)
 from chat_db import ChatDatabase as Database
 import logging
 import io
 import datetime
 import json
+import time
+import requests
 
-
+# Constants (You may want to define these constants at the top level of your module or config)
+BASE_URL = "https://api.personal.ai/v1"
+DOMAINNAME = "ms"
+HEADERS = {
+    "Authorization": "Bearer YOUR_PERSONAL_AI_TOKEN",
+    "Content-Type": "application/json"
+}
+MAX_RETRIES = 3
+RETRY_INTERVAL = 5  # in seconds
 
 log_stream = io.StringIO()
 logging.basicConfig(level=logging.DEBUG, stream=log_stream)
@@ -115,33 +129,71 @@ class ContextManager:
 logging.basicConfig(level=logging.DEBUG)
 
     
-    
 class ChatUtility:
+    """
+    Utility class to facilitate chat interactions using Personal AI and OpenAI services.
+    """
     def __init__(self, db: Database = None):
+        """
+        Initialize the ChatUtility instance with a database connection.
+        
+        Args:
+        - db (Database): Database instance to fetch and store chat data.
+        """
         self.db = db or Database()
         self.context_manager = ContextManager()
 
-
-    def send_primary_PAI(self, text: str, username: str, full_name: str, domain_name: str = "ms", context: Optional[str] = None) -> Dict:
+    def send_primary_PAI(self, text: str, username: str, full_name: str, domain_name: str = DOMAINNAME, context: Optional[str] = None) -> Dict:
+        """
+        Send a message to the primary Personal AI service and retrieve the response.
+        
+        Args:
+        - text (str): Message text.
+        - username (str): Username of the requester.
+        - full_name (str): Full name of the requester.
+        - domain_name (str): Domain for the Personal AI. Default is 'ms'.
+        - context (Optional[str]): Contextual message. Default is None.
+        
+        Returns:
+        - Dict: Contains the response, score, source, status code, and headers.
+        """
         method_name = "send_primary_PAI"
-        logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Entering method.")
-        logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Parameters: text='{text}', username='{username}', full_name='{full_name}', domain_name='{domain_name}', context='{context}'.")
+        retries = 0
+        
+        result = {
+            "response": None,
+            "score": None,
+            "source": "Personal AI",
+            "status_code": None,
+            "headers": None
+        }
+        
+        # Retry loop to ensure robustness against transient failures
+        while retries < MAX_RETRIES:
+            try:
+                logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Entering try block, attempt {retries + 1} of {MAX_RETRIES}.")
 
-        try:
-            with self.db:
-                # Get the last 10 pairs of chat interactions for context
+                # Get the last 10 pairs of chat interactions for context if not provided
                 if not context:
                     logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Context not provided. Generating context using context_manager.")
                     context = self.context_manager.generate_context(username, full_name)  # Pass both username and full_name
 
                 payload = {
                     "Text": text,
-                    "DomainName": domain_name,
-                    "Context": context
+                    "DomainName": domain_name
                 }
+                
+                # Check if context is not None, else log and avoid adding to payload
+                if context:
+                    payload["Context"] = context
+                else:
+                    logging.warning(f"CLASS {self.__class__.__name__} - {method_name}: Context value is None. Not including in payload.")
 
                 logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Sending payload to PAI: {json.dumps(payload, indent=4)}")
+                
+                # Send the request to Personal.AI
                 response = requests.post(BASE_URL + "/message", headers=HEADERS, json=payload, timeout=60)
+                
                 logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Received response from PAI with status code {response.status_code}")
 
                 response_data = response.json()
@@ -157,56 +209,83 @@ class ChatUtility:
                     "status_code": response.status_code,
                     "headers": dict(response.headers)
                 }
+                
                 logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Constructed result from PAI response: {json.dumps(result, indent=4)}")
-                return result
+                
+                # If a valid response is received, return it
+                if result['response']:
+                    return result
 
-        except requests.RequestException as e:
-            logging.error(f"CLASS {self.__class__.__name__} - {method_name}: Request error occurred with PAI: {e}")
-            raise  # Re-raise the exception after logging
-        except Exception as e:
-            logging.error(f"CLASS {self.__class__.__name__} - {method_name}: Unexpected error occurred during PAI interaction: {e}")
-            raise  # Re-raise the exception after logging
-        finally:
-            logging.debug(f"CLASS {self.__class__.__name__} - {method_name}: Exiting method.")
+            except requests.RequestException as e:
+                # Handle request exceptions and retry if under limit
+                logging.warning(f"Encountered request exception: {e}")
+                if e.response.status_code == 429:  # Too Many Requests
+                    logging.error("Rate limit reached. Breaking out of the retry loop.")
+                    break
+
+            except Exception as e:
+                # Handle other exceptions and retry if under limit
+                logging.error(f"Unexpected error occurred during PAI interaction: {e}")
+
+            finally:
+                retries += 1  # Increment the retries counter
+                if retries < MAX_RETRIES:
+                    logging.info(f"Retrying... ({retries + 1})")
+                    time.sleep(RETRY_INTERVAL)
+                else:
+                    logging.error(f"Failed to get a valid response from PAI after maximum retries.")
+                    break
 
 
     def send_secondary_GPT4(self, prompt: str, username: str, full_name: str, context: Optional[str] = None, recent_interactions: Optional[List[str]] = None) -> str:
+        """
+        Send a message to the secondary GPT-4 service and retrieve the response.
+        
+        Args:
+        - prompt (str): Message prompt.
+        - username (str): Username of the requester.
+        - full_name (str): Full name of the requester.
+        - context (Optional[str]): Contextual message. Default is None.
+        - recent_interactions (Optional[List[str]]): List of recent interactions. Default is None.
+        
+        Returns:
+        - str: Response from GPT-4.
+        """
         with self.db:
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {OPENAI_API_KEY}"
-            }
+            headers = OPENAI_HEADERS  # Use OPENAI_HEADERS constant
 
-            messages = [{"role": "system", "content": "You are a helpful assistant."},
-                        {"role": "user", "content": f"{prompt}"}]
+            messages = [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": f"{prompt}"}
+            ]
 
+            # Generate context if not provided
             if not context:
                 context = self.context_manager.generate_context(username, full_name)
             
-            print("OPENAI DEBUG: Context generated")
+            logging.debug("OPENAI DEBUG: Context generated")
 
+            # Fetch recent interactions if not provided
             if not recent_interactions:
                 recent_interactions = self.db.get_last_n_messages(10, username)
             
-            print("OPENAI DEBUG: Recent interactions fetched")
+            logging.debug("OPENAI DEBUG: Recent interactions fetched")
 
             messages.append({"role": "system", "content": context})
 
-            if recent_interactions:
-                for content, role in recent_interactions:
-                    messages.append({"role": role, "content": content})
-                    messages.extend([{"role": "system", "content": interaction} for interaction in recent_interactions])
+            for content, role in recent_interactions:
+                messages.append({"role": role, "content": content})
 
             payload = {
                 "model": "gpt-4",
                 "messages": messages
             }
 
-            print(f"OPENAI DEBUG: Sending payload: {payload}")
+            logging.debug(f"OPENAI DEBUG: Sending payload: {payload}")
 
             response = requests.post(OPENAI_ENDPOINT, headers=headers, json=payload, timeout=30)
             
-            print(f"OPENAI DEBUG: Response received: {response.text}")
+            logging.debug(f"OPENAI DEBUG: Response received: {response.text}")
 
             response_data = response.json()
             ai_content = response_data.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
